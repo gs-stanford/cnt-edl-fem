@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: cnt-edl-fem-explorer
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: .
+    pullRequestPreviewsEnabled: false

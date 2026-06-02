@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CNT Bundle EDL FEM Explorer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="controls" aria-label="Model controls">
+        <div class="brand">
+          <div class="eyebrow">ME 360 final project model</div>
+          <h1>CNT Bundle EDL FEM Explorer</h1>
+          <p>
+            General nonlinear Poisson-Boltzmann around same-bias CNT cylinders,
+            compared against the Debye-Huckel limit.
+          </p>
+        </div>
+
+        <section class="control-section">
+          <h2>Geometry</h2>
+          <label>
+            CNT cylinders
+            <input id="cylinderCount" type="number" min="2" max="8" step="1" value="2" />
+          </label>
+          <label>
+            CNT diameter, <span class="latex">d<sub>CNT</sub></span> (nm)
+            <input id="diameterNm" type="number" min="0.4" max="50" step="0.1" value="2.0" />
+          </label>
+          <label id="gapControl">
+            Accessible gap, <span class="latex">h<sub>eff</sub></span> (nm)
+            <input id="gapNm" type="number" min="0.05" max="20" step="0.05" value="1.0" />
+          </label>
+          <p id="presetGapNote" class="microcopy warning-note"></p>
+        </section>
+
+        <section class="control-section">
+          <h2>Bias and Electrolyte</h2>
+          <label>
+            Metal CNT bias, <span class="latex">&psi;<sub>m</sub></span> (V)
+            <input id="biasMv" type="number" min="-5" max="5" step="0.01" value="0.08" />
+          </label>
+          <label>
+            Stability limit, <span class="latex">|V|<sub>stab</sub></span> (V)
+            <input id="stabilityLimitV" type="number" min="0.1" max="10" step="0.1" value="2.5" />
+          </label>
+          <label>
+            Interactive bias slider, <span class="latex">&psi;<sub>m</sub></span> (V)
+            <input id="biasSlider" type="range" min="-2.5" max="2.5" step="0.01" value="0.08" />
+          </label>
+          <p class="microcopy warning-note">
+            Applied metal voltage is partitioned across a compact Stern layer
+            and the diffuse PB layer.
+          </p>
+          <label>
+            Stern capacitance, <span class="latex">C<sub>S</sub></span> (F/m<sup>2</sup>)
+            <input id="sternCapFpm2" type="number" min="0.01" max="10" step="0.01" value="0.20" />
+          </label>
+          <label>
+            Temperature, <span class="latex">T</span> (K)
+            <input id="temperatureK" type="number" min="250" max="380" step="1" value="298" />
+          </label>
+          <label>
+            Bulk formula concentration, <span class="latex">c<sub>0</sub></span> (mM)
+            <input id="concentrationMm" type="number" min="0.01" max="5000" step="1" value="100" />
+          </label>
+          <label>
+            Bulk medium relative permittivity, <span class="latex">&varepsilon;<sub>r</sub></span>
+            <input id="epsilonR" type="number" min="2" max="120" step="0.1" value="78.4" />
+          </label>
+          <label>
+            Target electrolyte preset
+            <select id="electrolytePreset">
+              <option value="tfsi" selected>TFSI⁻ salt, z = +1 / -1</option>
+              <option value="alcl4">AlCl₄⁻ salt, z = +1 / -1</option>
+              <option value="pf6">PF₆⁻ salt, z = +1 / -1</option>
+              <option value="bf4">BF₄⁻ salt, z = +1 / -1</option>
+              <option value="hso4">HSO₄⁻ acid/salt, z = +1 / -1</option>
+              <option value="so4">SO₄²⁻ aqueous test, z = +1 / -2</option>
+              <option value="ferricyanide">Fe(CN)₆³⁻ aqueous test, z = +1 / -3</option>
+              <option value="ferrocyanide">Fe(CN)₆⁴⁻ aqueous test, z = +1 / -4</option>
+              <option value="custom">Custom JSON species</option>
+            </select>
+          </label>
+          <label id="ionDiameterControl">
+            Effective target-ion diameter, <span class="latex">d<sub>ion,eff</sub></span> (nm)
+            <input id="ionDiameterNm" type="number" min="0.05" max="3" step="0.01" value="0.80" />
+          </label>
+          <label id="customSpeciesControl" class="wide">
+            Custom species JSON
+            <textarea id="customSpecies" rows="4">[
+  {"z": 1, "c": 2},
+  {"z": -2, "c": 1}
+]</textarea>
+          </label>
+          <p id="customSpeciesHelp" class="microcopy">
+            The species coefficients multiply <span class="latex">c<sub>0</sub></span>.
+            Example: a 2:1 salt uses <span class="latex">c<sub>+</sub>=1</span> and
+            <span class="latex">c<sub>-</sub>=2</span>. Bulk electroneutrality is required.
+          </p>
+          <p id="accessibilityNote" class="microcopy warning-note"></p>
+        </section>
+
+        <section class="control-section">
+          <h2>Numerics</h2>
+          <label>
+            Mesh resolution
+            <select id="meshResolution">
+              <option value="coarse">Fast</option>
+              <option value="medium" selected>Balanced</option>
+              <option value="fine">Fine</option>
+            </select>
+          </label>
+          <label>
+            Bias sweep points
+            <input id="sweepPoints" type="number" min="7" max="31" step="2" value="17" />
+          </label>
+          <button id="runButton" type="button">Run model</button>
+          <button id="exportCsvButton" type="button" class="secondary">Export sweep CSV</button>
+        </section>
+
+        <section class="model-note">
+          <h2>Boundary model</h2>
+          <p>
+            Current version prescribes metal voltage on each CNT and uses a
+            compact Stern capacitance as a Robin boundary condition in the
+            PB/FEM solve.
+          </p>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">Outputs</div>
+            <h2>Overlap, charge, capacitance, and DH failure</h2>
+          </div>
+          <div id="status" class="status">Ready</div>
+        </header>
+
+        <section class="metrics" aria-label="Model metrics">
+          <div class="metric">
+            <span>Diffuse potential, <span class="latex">&Psi;<sub>d</sub><sup>*</sup></span></span>
+            <strong id="metricPsi">--</strong>
+          </div>
+          <div class="metric">
+            <span>Stern drop, <span class="latex">&Delta;&psi;<sub>S</sub></span> (V)</span>
+            <strong id="metricStern">--</strong>
+          </div>
+          <div class="metric">
+            <span>Debye length, <span class="latex">&lambda;<sub>D</sub></span> (nm)</span>
+            <strong id="metricLambda">--</strong>
+          </div>
+          <div class="metric">
+            <span>Gap ratio, <span class="latex">h<sup>*</sup>=h<sub>eff</sub>/&lambda;<sub>D</sub></span></span>
+            <strong id="metricGap">--</strong>
+          </div>
+          <div class="metric">
+            <span>Overlap, <span class="latex">&Omega;<sub>&Psi;</sub><sup>*</sup></span></span>
+            <strong id="metricOverlap">--</strong>
+          </div>
+          <div class="metric">
+            <span>Target-ion enrichment, <span class="latex">E<sub>mid</sub><sup>*</sup></span></span>
+            <strong id="metricEnrichment">--</strong>
+          </div>
+          <div class="metric">
+            <span>Surface charge, <span class="latex">q&prime;<sup>*</sup></span></span>
+            <strong id="metricCharge">--</strong>
+          </div>
+          <div class="metric">
+            <span>Capacitance, <span class="latex">c&prime;<sup>*</sup></span></span>
+            <strong id="metricCap">--</strong>
+          </div>
+          <div class="metric">
+            <span>DH charge error, <span class="latex">&epsilon;<sub>q</sub><sup>*</sup></span></span>
+            <strong id="metricError">--</strong>
+          </div>
+          <div class="metric">
+            <span>Accessibility</span>
+            <strong id="metricAccess">--</strong>
+          </div>
+          <div class="metric">
+            <span>Window score, <span class="latex">S<sub>w</sub><sup>*</sup></span></span>
+            <strong id="metricWindow">--</strong>
+          </div>
+        </section>
+
+        <section class="figure-grid">
+          <figure class="figure wide">
+            <figcaption>
+              <span>Non-dimensional potential field</span>
+              <small>Nonlinear PB solution, <span class="latex">&Psi;<sup>*</sup>(x<sup>*</sup>, y<sup>*</sup>)</span></small>
+            </figcaption>
+            <canvas id="potentialCanvas" width="1600" height="760"></canvas>
+          </figure>
+
+          <figure class="figure">
+            <figcaption>
+              <span>Charge and capacitance vs metal bias</span>
+              <small><span class="latex">q&prime;<sup>*</sup></span> and total <span class="latex">c&prime;<sup>*</sup></span> with Stern partition</small>
+            </figcaption>
+            <svg id="qcPlot" class="plot-svg" viewBox="0 0 520 360" role="img"></svg>
+          </figure>
+
+          <figure class="figure">
+            <figcaption>
+              <span>Bias trajectory</span>
+              <small><span class="latex">q&prime;<sup>*</sup></span> vs <span class="latex">c&prime;<sup>*</sup></span>; arrow follows increasing <span class="latex">|&Psi;<sub>s</sub><sup>*</sup>|</span></small>
+            </figcaption>
+            <svg id="trajectoryPlot" class="plot-svg" viewBox="0 0 520 360" role="img"></svg>
+          </figure>
+
+          <figure class="figure">
+            <figcaption>
+              <span>DH failure</span>
+              <small>relative charge error vs <span class="latex">|&psi;<sub>m</sub>|</span></small>
+            </figcaption>
+            <svg id="errorPlot" class="plot-svg" viewBox="0 0 520 360" role="img"></svg>
+          </figure>
+
+          <figure class="figure">
+            <figcaption>
+              <span>Interstitial enrichment</span>
+              <small id="enrichmentCaption">target ion <span class="latex">n<sub>mid</sub>/n<sub>&infin;</sub></span> (1 = bulk) vs <span class="latex">|&Psi;<sub>s</sub><sup>*</sup>|</span></small>
+            </figcaption>
+            <svg id="enrichmentPlot" class="plot-svg" viewBox="0 0 520 360" role="img"></svg>
+          </figure>
+
+          <figure class="figure">
+            <figcaption>
+              <span>Doping window score</span>
+              <small>heuristic drive × crowding × stability vs <span class="latex">|&psi;<sub>m</sub>|</span></small>
+            </figcaption>
+            <svg id="windowPlot" class="plot-svg" viewBox="0 0 520 360" role="img"></svg>
+          </figure>
+        </section>
+
+        <section class="theory-panel">
+          <h2>Model equations</h2>
+          <p>
+            The solver computes the Debye length from the selected electrolyte:
+          </p>
+          <div class="equation">
+            &lambda;<sub>D</sub> =
+            &kappa;<sup>-1</sup>,&nbsp;&nbsp;
+            &kappa;<sup>2</sup> =
+            <span class="frac">
+              <span>e<sup>2</sup>N<sub>A</sub></span>
+              <span>&varepsilon;<sub>r</sub>&varepsilon;<sub>0</sub>k<sub>B</sub>T</span>
+            </span>
+            c<sub>0</sub>
+            &sum;<sub>i</sub>z<sub>i</sub><sup>2</sup>c<sub>i</sub>
+          </div>
+          <p class="microcopy">
+            In the calculation, <span class="latex">c<sub>0</sub></span> is entered in mM; numerically,
+            <span class="latex">1 mM = 1 mol m<sup>-3</sup></span>.
+          </p>
+          <p>
+            Then it solves the general nondimensional nonlinear PB equation:
+          </p>
+          <div class="equation">
+            &nabla;<sub>*</sub><sup>2</sup>&Psi;<sup>*</sup> =
+            -
+            <span class="frac">
+              <span>&sum;<sub>i</sub>z<sub>i</sub>c<sub>i</sub>exp(-z<sub>i</sub>&Psi;<sup>*</sup>)</span>
+              <span>&sum;<sub>i</sub>z<sub>i</sub><sup>2</sup>c<sub>i</sub></span>
+            </span>
+          </div>
+          <p>
+            The applied CNT metal voltage is partitioned through a compact Stern
+            layer before the FEM solve:
+          </p>
+          <div class="equation">
+            &Psi;<sub>m</sub><sup>*</sup> =
+            &Psi;<sub>d</sub><sup>*</sup> +
+            &delta;<sub>S</sub>q<sub>S</sub><sup>*</sup>,&nbsp;&nbsp;
+            &delta;<sub>S</sub> =
+            <span class="frac">
+              <span>&varepsilon;<sub>r</sub>&varepsilon;<sub>0</sub></span>
+              <span>C<sub>S</sub>&lambda;<sub>D</sub></span>
+            </span>
+          </div>
+          <p class="microcopy">
+            This version imposes the Stern relation as a Robin boundary term in
+            the FEM solve, so local surface charge and local Stern drop can vary
+            around each CNT.
+          </p>
+          <p>
+            with Stern-partitioned <span class="latex">&Psi;<sub>d</sub><sup>*</sup></span> on all CNT boundaries and
+            <span class="latex">&Psi;<sup>*</sup>=0</span> at the outer bath boundary.
+            The DH comparison is the small-potential limit
+            <span class="latex">&nabla;<sub>*</sub><sup>2</sup>&Psi;<sup>*</sup>=&Psi;<sup>*</sup></span>.
+          </p>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./solver.js"></script>
+  </body>
+</html>
