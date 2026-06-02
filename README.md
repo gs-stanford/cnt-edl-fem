@@ -26,6 +26,12 @@ Then open `http://localhost:8088`.
 - CNT centers use compact triangular-lattice bundle layouts for 2 to 8
   cylinders, including a diamond-like four-cylinder layout around the central
   interstitial.
+- A one-cylinder benchmark mode solves an isolated CNT and compares FEM
+  Debye-Huckel charge against the analytic cylindrical Debye-Huckel solution
+  using modified Bessel functions, the same Stern Robin boundary condition, and
+  a finite outer bath radius matching the FEM domain. The nonlinear cylindrical
+  PB result remains numerical; there is no simple planar Gouy-Chapman-style
+  closed form for that case.
 - Debye length is computed from temperature, relative permittivity, formula
   concentration, and electrolyte stoichiometry.
 - Bias sweeps follow the attractive doping direction: positive for anion

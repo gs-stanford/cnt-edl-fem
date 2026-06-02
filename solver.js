@@ -50,6 +50,8 @@ const outputs = {
   enrichment: document.getElementById("enrichmentPlot"),
   enrichmentCaption: document.getElementById("enrichmentCaption"),
   window: document.getElementById("windowPlot"),
+  benchmark: document.getElementById("benchmarkPlot"),
+  benchmarkCaption: document.getElementById("benchmarkCaption"),
 };
 
 const statusEl = document.getElementById("status");
@@ -203,7 +205,7 @@ function readInputs() {
   const psiS = diffusePsiFromMetalPsi(metalPsi, sternDelta, species, "nlpb");
   const diffuseBiasV = (psiS * thermalMv) / 1000;
   const sternDropV = biasV - diffuseBiasV;
-  const cylinderCount = Math.max(2, Math.min(8, Math.round(Number(controls.cylinderCount.value))));
+  const cylinderCount = Math.max(1, Math.min(8, Math.round(Number(controls.cylinderCount.value))));
   controls.cylinderCount.value = cylinderCount;
 
   return {
@@ -437,6 +439,7 @@ function createMesh(params) {
 function packedCylinderCenters(count, spacing) {
   const root3 = Math.sqrt(3);
   const layouts = {
+    1: [[0, 0]],
     2: [[-0.5, 0], [0.5, 0]],
     3: [[-0.5, -root3 / 6], [0.5, -root3 / 6], [0, root3 / 3]],
     4: [[-0.5, 0], [0.5, 0], [0, root3 / 2], [0, -root3 / 2]],
@@ -445,7 +448,7 @@ function packedCylinderCenters(count, spacing) {
     7: [[0, 0], [1, 0], [0.5, root3 / 2], [-0.5, root3 / 2], [-1, 0], [-0.5, -root3 / 2], [0.5, -root3 / 2]],
     8: [[0, 0], [1, 0], [0.5, root3 / 2], [-0.5, root3 / 2], [-1, 0], [-0.5, -root3 / 2], [0.5, -root3 / 2], [1.5, root3 / 2]],
   };
-  const layout = layouts[Math.max(2, Math.min(8, count))];
+  const layout = layouts[Math.max(1, Math.min(8, count))];
   const centroid = layout.reduce((sum, point) => ({
     x: sum.x + point[0],
     y: sum.y + point[1],
@@ -949,6 +952,12 @@ function accessibilityLabel(params) {
 }
 
 function updateAccessibilityNote(params) {
+  if (params.cylinderCount === 1) {
+    accessibilityNoteEl.textContent =
+      "Single-cylinder benchmark mode: h_eff is not used because there is no CNT-CNT interstitial gap. " +
+      "Use this mode to compare FEM-DH against the analytic cylindrical Debye-Huckel reference.";
+    return;
+  }
   const ratio = accessibilityRatio(params);
   accessibilityNoteEl.textContent =
     `${params.presetLabel}: ` +
@@ -1191,6 +1200,178 @@ function drawAll(result) {
     preferredYTickStep: 0.25,
     showLegend: false,
   });
+  drawSingleCylinderBenchmark(outputs.benchmark, result);
+}
+
+function drawSingleCylinderBenchmark(svg, result) {
+  if (!svg) return;
+  if (result.params.cylinderCount !== 1 || result.dh.mesh.centers.length !== 1) {
+    const { plot } = clearSvg(svg);
+    if (outputs.benchmarkCaption) {
+      outputs.benchmarkCaption.textContent =
+        "set CNT cylinders = 1 to compare FEM-DH charge with analytic cylindrical DH";
+    }
+    svg.appendChild(svgText("Set CNT cylinders = 1", plot.x + 82, plot.y + 112, {
+      class: "axis-label",
+      "font-size": 16,
+    }));
+    svg.appendChild(svgText("The benchmark is only defined for an isolated cylinder.", plot.x + 28, plot.y + 142, {
+      "font-size": 12,
+    }));
+    return;
+  }
+
+  const benchmark = singleCylinderDhChargeBenchmark(result);
+  if (!benchmark || !benchmark.rows.length) {
+    const { plot } = clearSvg(svg);
+    if (outputs.benchmarkCaption) {
+      outputs.benchmarkCaption.textContent = "benchmark unavailable for this parameter set";
+    }
+    svg.appendChild(svgText("Benchmark unavailable", plot.x + 84, plot.y + 128, {
+      class: "axis-label",
+      "font-size": 16,
+    }));
+    return;
+  }
+
+  if (outputs.benchmarkCaption) {
+    outputs.benchmarkCaption.innerHTML =
+      `FEM-DH charge vs analytic cylinder DH; mean error ` +
+      `<span class="latex">${formatNumber(100 * benchmark.meanChargeError, 2)}%</span>`;
+  }
+
+  drawSvgLinePlot(svg, {
+    rows: benchmark.rows,
+    xKey: "biasAbsV",
+    series: [
+      { key: "analyticQAbs", label: "analytic DH", color: "#111827", axis: "left" },
+      { key: "femQAbs", label: "FEM-DH", color: "#064f9e", axis: "left" },
+    ],
+    xLabel: "|ψₘ| (V)",
+    yLabel: "q_DH*",
+    xLabelParts: mathVoltageMagnitudeParts(),
+    yLabelParts: mathQDhParts(),
+    xMinZero: true,
+    xFixedRange: [0, result.params.stabilityLimitV],
+    yMinZero: true,
+    currentX: Math.abs(Number(controls.biasMv.value)),
+    showLegend: true,
+  });
+}
+
+function singleCylinderDhChargeBenchmark(result) {
+  const mesh = result.dh.mesh;
+  const center = mesh.centers[0];
+  const rLimit = Math.min(
+    mesh.maxX - center.x,
+    center.x - mesh.minX,
+    mesh.maxY - center.y,
+    center.y - mesh.minY,
+  );
+  const effectiveBoundary = effectiveRobinBoundary(mesh);
+  const boundaryRadius = effectiveBoundary.radius || mesh.a;
+  const rows = [];
+  let errorSum = 0;
+  let errorCount = 0;
+  for (const row of result.sweep) {
+    const reference = cylindricalDhReference(
+      { ...result.dhParams, metalPsi: row.metalPsi },
+      rLimit,
+      boundaryRadius,
+      effectiveBoundary.perimeter || 2 * Math.PI * mesh.a,
+    );
+    if (!reference || !Number.isFinite(reference.qStar) || !Number.isFinite(row.qDhStar)) continue;
+    const chargeError = Math.abs(row.qDhStar - reference.qStar) / Math.max(1e-12, Math.abs(reference.qStar));
+    if (Math.abs(reference.qStar) > 1e-9) {
+      errorSum += chargeError;
+      errorCount += 1;
+    }
+    rows.push({
+      biasAbsV: row.biasAbsV,
+      femQAbs: Math.abs(row.qDhStar),
+      analyticQAbs: Math.abs(reference.qStar),
+      chargeError,
+    });
+  }
+  return {
+    rows,
+    meanChargeError: errorCount > 0 ? errorSum / errorCount : 0,
+  };
+}
+
+function effectiveRobinBoundary(mesh) {
+  if (!mesh.robinBoundary.length || !mesh.centers.length) {
+    return { radius: mesh.a, perimeter: 2 * Math.PI * mesh.a };
+  }
+  const center = mesh.centers[0];
+  const byUnknown = new Map();
+  for (const node of mesh.nodes) {
+    if (node.unknown >= 0) byUnknown.set(node.unknown, node);
+  }
+  let weightedRadius = 0;
+  let perimeter = 0;
+  for (const item of mesh.robinBoundary) {
+    const node = byUnknown.get(item.unknown);
+    if (!node) continue;
+    const radius = Math.sqrt((node.x - center.x) ** 2 + (node.y - center.y) ** 2);
+    weightedRadius += item.weight * radius;
+    perimeter += item.weight;
+  }
+  return {
+    radius: perimeter > 0 ? weightedRadius / perimeter : mesh.a,
+    perimeter,
+  };
+}
+
+function cylindricalDhReference(params, outerRadiusStar = Infinity, boundaryRadiusStar = params.radiusStar, boundaryPerimeterStar = 2 * Math.PI * params.radiusStar) {
+  const rb = boundaryRadiusStar;
+  if (!Number.isFinite(rb) || rb <= 0) return null;
+  const k0b = modifiedBesselK(0, rb);
+  const k1b = modifiedBesselK(1, rb);
+  let beta = 0;
+  if (Number.isFinite(outerRadiusStar) && outerRadiusStar > rb) {
+    beta = -modifiedBesselK(0, outerRadiusStar) / Math.max(modifiedBesselI(0, outerRadiusStar), 1e-300);
+  }
+  const i0b = modifiedBesselI(0, rb);
+  const i1b = modifiedBesselI(1, rb);
+  const surfaceShape = k0b + beta * i0b;
+  const normalShape = k1b - beta * i1b;
+  const denom = surfaceShape + params.sternDelta * normalShape;
+  if (!Number.isFinite(denom) || Math.abs(denom) < 1e-12) return null;
+  const amplitude = params.metalPsi / denom;
+  return {
+    psiAtR: (r) => amplitude * (modifiedBesselK(0, r) + beta * modifiedBesselI(0, r)),
+    qStar: boundaryPerimeterStar * amplitude * normalShape,
+  };
+}
+
+function modifiedBesselI(order, x) {
+  if (!Number.isFinite(x)) return NaN;
+  const n = 720;
+  const h = Math.PI / n;
+  let sum = 0;
+  for (let i = 0; i <= n; i += 1) {
+    const theta = i * h;
+    const weight = i === 0 || i === n ? 1 : (i % 2 === 0 ? 2 : 4);
+    sum += weight * Math.exp(x * Math.cos(theta)) * (order === 0 ? 1 : Math.cos(theta));
+  }
+  return (h / (3 * Math.PI)) * sum;
+}
+
+function modifiedBesselK(order, x) {
+  if (!Number.isFinite(x) || x <= 0) return Infinity;
+  const n = 720;
+  const tMax = Math.max(12, Math.min(22, Math.log(80 / Math.max(x, 1e-9)) + 5));
+  const h = tMax / n;
+  let sum = 0;
+  for (let i = 0; i <= n; i += 1) {
+    const t = i * h;
+    const weight = i === 0 || i === n ? 1 : (i % 2 === 0 ? 2 : 4);
+    const coshT = Math.cosh(t);
+    const kernel = Math.exp(-x * coshT) * (order === 0 ? 1 : coshT);
+    sum += weight * kernel;
+  }
+  return (h / 3) * sum;
 }
 
 function clearCanvas(canvas) {
@@ -1247,10 +1428,13 @@ function drawPotential(canvas, result) {
   drawColorbar(ctx, canvas.width - 56, plot.y, 14, plot.h, maxAbs);
   ctx.fillStyle = "#111827";
   ctx.font = "700 13px Arial";
-  ctx.fillText("same-bias CNT cylinders", plot.x + 10, plot.y + 20);
+  ctx.fillText(mesh.centers.length === 1 ? "isolated CNT cylinder" : "same-bias CNT cylinders", plot.x + 10, plot.y + 20);
   ctx.fillStyle = "#5c6676";
   ctx.font = "12px Arial";
-  ctx.fillText(`a*=${formatNumber(mesh.a, 2)}, h*=${formatNumber(mesh.h, 2)}`, plot.x + 10, plot.y + 38);
+  const geometryText = mesh.centers.length === 1
+    ? `a*=${formatNumber(mesh.a, 2)}`
+    : `a*=${formatNumber(mesh.a, 2)}, h*=${formatNumber(mesh.h, 2)}`;
+  ctx.fillText(geometryText, plot.x + 10, plot.y + 38);
 }
 
 function aspectFitPlot(canvas, mesh) {
@@ -1592,6 +1776,14 @@ function mathWindowScoreParts() {
   return [
     { text: "S" },
     { text: "w", sub: true },
+    { text: "*", sup: true },
+  ];
+}
+
+function mathQDhParts() {
+  return [
+    { text: "q" },
+    { text: "DH", sub: true },
     { text: "*", sup: true },
   ];
 }
