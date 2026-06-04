@@ -40,6 +40,8 @@ const metrics = {
   access: document.getElementById("metricAccess"),
   window: document.getElementById("metricWindow"),
   stern: document.getElementById("metricStern"),
+  enrichmentCard: document.getElementById("metricEnrichmentCard"),
+  windowCard: document.getElementById("metricWindowCard"),
 };
 
 const outputs = {
@@ -49,7 +51,9 @@ const outputs = {
   error: document.getElementById("errorPlot"),
   enrichment: document.getElementById("enrichmentPlot"),
   enrichmentCaption: document.getElementById("enrichmentCaption"),
+  enrichmentFigure: document.getElementById("enrichmentFigure"),
   window: document.getElementById("windowPlot"),
+  windowFigure: document.getElementById("windowFigure"),
   benchmark: document.getElementById("benchmarkPlot"),
   benchmarkCaption: document.getElementById("benchmarkCaption"),
 };
@@ -1126,10 +1130,8 @@ function formatTick(value) {
 
 function drawAll(result) {
   const currentBiasAbsV = Math.abs(Number(controls.biasMv.value));
-  outputs.enrichmentCaption.innerHTML =
-    `${escapeHtml(result.params.targetIonName)} enrichment, ` +
-    `<span class="latex">n<sub>mid</sub>/n<sub>&infin;</sub></span> (1 = bulk) vs ` +
-    `<span class="latex">|&psi;<sub>m</sub>|</span>`;
+  const oneCylinder = result.params.cylinderCount === 1;
+  updateOneCylinderVisibility(oneCylinder);
   drawPotential(outputs.potential, result);
   drawSvgLinePlot(outputs.qc, {
     rows: result.sweep,
@@ -1163,44 +1165,57 @@ function drawAll(result) {
     yMinZero: true,
     showLegend: false,
   });
-  drawSvgLinePlot(outputs.enrichment, {
-    rows: result.sweep,
-    xKey: "biasAbsV",
-    series: [{
-      key: "enrichment",
-      label: `${result.params.targetIonName} enrichment`,
-      color: "#bd6b0d",
-      axis: "left",
-    }],
-    xLabel: "|ψₘ| (V)",
-    yLabel: "n_mid / n_∞",
-    xLabelParts: mathVoltageMagnitudeParts(),
-    yLabelParts: mathNMidNInfParts(),
-    currentX: currentBiasAbsV,
-    xMinZero: true,
-    xFixedRange: [0, result.params.stabilityLimitV],
-    yScale: "log10",
-    yFixedRange: [1, maxPositivePlotValue(result.sweep, "enrichment")],
-    referenceY: 1,
-    referenceLabel: "bulk",
-    showLegend: false,
-  });
-  drawSvgLinePlot(outputs.window, {
-    rows: result.windowSweep || result.sweep,
-    xKey: "biasAbsV",
-    series: [{ key: "windowScore", label: "window score", color: "#19724a", axis: "left" }],
-    xLabel: "|ψₘ| (V)",
-    yLabel: "S_w*",
-    xLabelParts: mathVoltageMagnitudeParts(),
-    yLabelParts: mathWindowScoreParts(),
-    currentX: currentBiasAbsV,
-    xMinZero: true,
-    xFixedRange: [0, result.params.stabilityLimitV],
-    yFixedRange: [0, 1],
-    preferredYTickStep: 0.25,
-    showLegend: false,
-  });
+  if (!oneCylinder) {
+    outputs.enrichmentCaption.innerHTML =
+      `${escapeHtml(result.params.targetIonName)} enrichment, ` +
+      `<span class="latex">n<sub>mid</sub>/n<sub>&infin;</sub></span> (1 = bulk) vs ` +
+      `<span class="latex">|&psi;<sub>m</sub>|</span>`;
+    drawSvgLinePlot(outputs.enrichment, {
+      rows: result.sweep,
+      xKey: "biasAbsV",
+      series: [{
+        key: "enrichment",
+        label: `${result.params.targetIonName} enrichment`,
+        color: "#bd6b0d",
+        axis: "left",
+      }],
+      xLabel: "|ψₘ| (V)",
+      yLabel: "n_mid / n_∞",
+      xLabelParts: mathVoltageMagnitudeParts(),
+      yLabelParts: mathNMidNInfParts(),
+      currentX: currentBiasAbsV,
+      xMinZero: true,
+      xFixedRange: [0, result.params.stabilityLimitV],
+      yScale: "log10",
+      yFixedRange: [1, maxPositivePlotValue(result.sweep, "enrichment")],
+      referenceY: 1,
+      referenceLabel: "bulk",
+      showLegend: false,
+    });
+    drawSvgLinePlot(outputs.window, {
+      rows: result.windowSweep || result.sweep,
+      xKey: "biasAbsV",
+      series: [{ key: "windowScore", label: "window score", color: "#19724a", axis: "left" }],
+      xLabel: "|ψₘ| (V)",
+      yLabel: "S_w*",
+      xLabelParts: mathVoltageMagnitudeParts(),
+      yLabelParts: mathWindowScoreParts(),
+      currentX: currentBiasAbsV,
+      xMinZero: true,
+      xFixedRange: [0, result.params.stabilityLimitV],
+      yFixedRange: [0, 1],
+      preferredYTickStep: 0.25,
+      showLegend: false,
+    });
+  }
   drawSingleCylinderBenchmark(outputs.benchmark, result);
+}
+
+function updateOneCylinderVisibility(oneCylinder) {
+  metrics.enrichmentCard?.classList.toggle("hidden", oneCylinder);
+  metrics.windowCard?.classList.toggle("hidden", oneCylinder);
+  outputs.enrichmentFigure?.classList.toggle("hidden", oneCylinder);
+  outputs.windowFigure?.classList.toggle("hidden", oneCylinder);
 }
 
 function drawSingleCylinderBenchmark(svg, result) {
