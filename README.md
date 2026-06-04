@@ -34,6 +34,11 @@ Then open `http://localhost:8088`.
   closed form for that case.
 - Debye length is computed from temperature, relative permittivity, formula
   concentration, and electrolyte stoichiometry.
+- If the computed Debye length is too small for the fixed browser FEM mesh to
+  resolve, the app reports the physical `lambda_D` but solves with a larger
+  `lambda_D,solve`. This is a numerical regularization for the thin-EDL limit,
+  not an exact small-Debye-length calculation. Capped runs should be interpreted
+  as asymptotic/qualitative.
 - Bias sweeps follow the attractive doping direction: positive for anion
   targets and negative for cation targets, plotted against absolute metal bias.
 - Anion presets use the supplied DFT nearest intertube C-C distances as

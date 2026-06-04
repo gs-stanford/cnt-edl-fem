@@ -2,6 +2,7 @@ const ELEMENTARY_CHARGE = 1.602176634e-19;
 const BOLTZMANN = 1.380649e-23;
 const AVOGADRO = 6.02214076e23;
 const EPS0 = 8.8541878128e-12;
+const MAX_SOLVER_CELL_STAR = 0.45;
 
 const controls = {
   cylinderCount: document.getElementById("cylinderCount"),
@@ -31,6 +32,7 @@ const controls = {
 const metrics = {
   psi: document.getElementById("metricPsi"),
   lambda: document.getElementById("metricLambda"),
+  solverLambda: document.getElementById("metricSolverLambda"),
   gap: document.getElementById("metricGap"),
   overlap: document.getElementById("metricOverlap"),
   enrichment: document.getElementById("metricEnrichment"),
@@ -201,20 +203,33 @@ function readInputs() {
   controls.biasMv.value = formatInputNumber(biasV, 3);
   controls.biasSlider.value = biasV;
   const metalPsi = biasMv / thermalMv;
-  const sternDelta = computeSternDelta(epsilonR, debyeNm, sternCapFpm2);
+  const cylinderCount = Math.max(1, Math.min(8, Math.round(Number(controls.cylinderCount.value))));
+  controls.cylinderCount.value = cylinderCount;
+  const capInfo = computeSolverDebyeCap({
+    diameterNm,
+    gapNm,
+    debyeNm,
+    cylinderCount,
+    resolution: controls.meshResolution.value,
+  });
+  const solverDebyeNm = capInfo.solverDebyeNm;
+  const sternDelta = computeSternDelta(epsilonR, solverDebyeNm, sternCapFpm2);
   const psiS = diffusePsiFromMetalPsi(metalPsi, sternDelta, species, "nlpb");
   const diffuseBiasV = (psiS * thermalMv) / 1000;
   const sternDropV = biasV - diffuseBiasV;
-  const cylinderCount = Math.max(1, Math.min(8, Math.round(Number(controls.cylinderCount.value))));
-  controls.cylinderCount.value = cylinderCount;
 
   return {
     cylinderCount,
     diameterNm,
-    radiusStar: (0.5 * diameterNm) / debyeNm,
-    gapStar: gapNm / debyeNm,
+    radiusStar: (0.5 * diameterNm) / solverDebyeNm,
+    gapStar: gapNm / solverDebyeNm,
     gapNm,
     debyeNm,
+    solverDebyeNm,
+    debyeCapActive: capInfo.active,
+    debyeCapScale: capInfo.scale,
+    solverCellStar: capInfo.cellStar,
+    solverCellLimitStar: MAX_SOLVER_CELL_STAR,
     temperatureK,
     concentrationMm,
     epsilonR,
@@ -348,14 +363,57 @@ function meshSpecFor(resolution, cylinderCount) {
   };
 }
 
+function computeSolverDebyeCap({ diameterNm, gapNm, debyeNm, cylinderCount, resolution }) {
+  let solverDebyeNm = debyeNm;
+  let spacing = estimateMeshCellStar(
+    (0.5 * diameterNm) / solverDebyeNm,
+    gapNm / solverDebyeNm,
+    cylinderCount,
+    resolution,
+  );
+  for (let iter = 0; iter < 8 && spacing.maxCell > MAX_SOLVER_CELL_STAR; iter += 1) {
+    solverDebyeNm *= spacing.maxCell / MAX_SOLVER_CELL_STAR;
+    spacing = estimateMeshCellStar(
+      (0.5 * diameterNm) / solverDebyeNm,
+      gapNm / solverDebyeNm,
+      cylinderCount,
+      resolution,
+    );
+  }
+  return {
+    solverDebyeNm,
+    active: solverDebyeNm > debyeNm * 1.001,
+    scale: solverDebyeNm / debyeNm,
+    cellStar: spacing.maxCell,
+  };
+}
+
+function estimateMeshCellStar(a, h, cylinderCount, resolution) {
+  const effectiveGap = cylinderCount === 1 ? 0 : h;
+  const spacing = 2 * a + effectiveGap;
+  const centers = packedCylinderCenters(cylinderCount, spacing);
+  const meshSpec = meshSpecFor(resolution, cylinderCount);
+  const pad = Math.max(5, 4 * Math.max(1, a), 2.4 * effectiveGap);
+  const xs = centers.map((center) => center.x);
+  const ys = centers.map((center) => center.y);
+  const minX = Math.min(...xs) - a - pad;
+  const maxX = Math.max(...xs) + a + pad;
+  const minY = Math.min(...ys) - a - pad;
+  const maxY = Math.max(...ys) + a + pad;
+  const dx = (maxX - minX) / (meshSpec.nx - 1);
+  const dy = (maxY - minY) / (meshSpec.ny - 1);
+  return { dx, dy, maxCell: Math.max(dx, dy) };
+}
+
 function createMesh(params) {
   const { radiusStar: a, gapStar: h, cylinderCount } = params;
   const useRobinBoundary = params.boundaryMode === "robin";
-  const spacing = 2 * a + h;
+  const effectiveGap = cylinderCount === 1 ? 0 : h;
+  const spacing = 2 * a + effectiveGap;
   const centers = packedCylinderCenters(cylinderCount, spacing);
 
   const meshSpec = meshSpecFor(params.resolution, cylinderCount);
-  const pad = Math.max(5, 4 * Math.max(1, a), 2.4 * h);
+  const pad = Math.max(5, 4 * Math.max(1, a), 2.4 * effectiveGap);
   const xs = centers.map((center) => center.x);
   const ys = centers.map((center) => center.y);
   const minX = Math.min(...xs) - a - pad;
@@ -948,10 +1006,12 @@ function accessibilityLabel(params) {
 }
 
 function updateAccessibilityNote(params) {
+  const capNote = solverDebyeCapNote(params);
   if (params.cylinderCount === 1) {
     accessibilityNoteEl.textContent =
       "Single-cylinder benchmark mode: h_eff is not used because there is no CNT-CNT interstitial gap. " +
-      "Use this mode to compare FEM-DH against the analytic cylindrical Debye-Huckel reference.";
+      "Use this mode to compare FEM-DH against the analytic cylindrical Debye-Huckel reference." +
+      capNote;
     return;
   }
   const ratio = accessibilityRatio(params);
@@ -959,7 +1019,16 @@ function updateAccessibilityNote(params) {
     `${params.presetLabel}: ` +
     `d_ion,eff ≈ ${formatNumber(params.ionDiameterNm, 2)} nm. ` +
     `h_eff / d_ion,eff = ${formatNumber(ratio, 2)} (${accessibilityLabel(params)}). ` +
-    "The PB source uses valence/stoichiometry; ion identity enters through accessibility and geometry.";
+    "The PB source uses valence/stoichiometry; ion identity enters through accessibility and geometry." +
+    capNote;
+}
+
+function solverDebyeCapNote(params) {
+  if (!params.debyeCapActive) return "";
+  return ` Numerical cap active: physical lambda_D = ${formatNumber(params.debyeNm, 3)} nm, ` +
+    `solver lambda_D = ${formatNumber(params.solverDebyeNm, 3)} nm ` +
+    `(mesh cell ≈ ${formatNumber(params.solverCellStar, 2)} lambda_D,solve). ` +
+    "Treat this as a thin-EDL regularization, not the exact small-lambda_D solution.";
 }
 
 async function runSweep(params, zTarget) {
@@ -1021,6 +1090,9 @@ function updateMetricCards(result) {
   metrics.psi.textContent = formatNumber(result.metrics.psiS, 3);
   metrics.stern.textContent = formatNumber(result.metrics.sternDropV, 3);
   metrics.lambda.textContent = formatNumber(result.params.debyeNm, 3);
+  metrics.solverLambda.textContent = result.params.debyeCapActive
+    ? `${formatNumber(result.params.solverDebyeNm, 3)} cap`
+    : formatNumber(result.params.solverDebyeNm, 3);
   metrics.gap.textContent = formatNumber(result.metrics.hStar, 3);
   metrics.overlap.textContent = formatNumber(result.metrics.overlap, 3);
   metrics.enrichment.textContent = formatNumber(result.metrics.enrichment, 2) + "x";
@@ -1038,6 +1110,9 @@ function updateMetricCardsFromSweep(result, metalBiasV) {
   metrics.psi.textContent = formatNumber(row.psiS, 3);
   metrics.stern.textContent = formatNumber(row.sternDropV, 3);
   metrics.lambda.textContent = formatNumber(result.params.debyeNm, 3);
+  metrics.solverLambda.textContent = result.params.debyeCapActive
+    ? `${formatNumber(result.params.solverDebyeNm, 3)} cap`
+    : formatNumber(result.params.solverDebyeNm, 3);
   metrics.gap.textContent = formatNumber(result.params.gapStar, 3);
   metrics.overlap.textContent = formatNumber(row.overlap, 3);
   metrics.enrichment.textContent = formatNumber(row.enrichment, 2) + "x";
@@ -2025,6 +2100,9 @@ function exportCsv() {
     "metal_bias_mV",
     "diffuse_bias_V",
     "stern_drop_V",
+    "debye_length_nm",
+    "solver_debye_length_nm",
+    "debye_length_capped",
     "q_star_nlpb",
     "q_star_dh",
     "c_star_total_wrt_metal_voltage",
@@ -2044,6 +2122,9 @@ function exportCsv() {
       row.biasMv,
       row.diffuseBiasV,
       row.sternDropV,
+      latestResult.params.debyeNm,
+      latestResult.params.solverDebyeNm,
+      latestResult.params.debyeCapActive,
       row.qStar,
       row.qDhStar,
       row.cStar,
