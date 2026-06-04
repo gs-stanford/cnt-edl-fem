@@ -26,12 +26,13 @@ Then open `http://localhost:8088`.
 - CNT centers use compact triangular-lattice bundle layouts for 2 to 8
   cylinders, including a diamond-like four-cylinder layout around the central
   interstitial.
-- A one-cylinder benchmark mode solves an isolated CNT and compares FEM
-  Debye-Huckel charge against the analytic cylindrical Debye-Huckel solution
-  using modified Bessel functions, the same Stern Robin boundary condition, and
-  a finite outer bath radius matching the FEM domain. The nonlinear cylindrical
-  PB result remains numerical; there is no simple planar Gouy-Chapman-style
-  closed form for that case.
+- A one-cylinder benchmark mode compares a Debye-scaled 1D radial DH mesh
+  against the analytic cylindrical Debye-Huckel charge using modified Bessel
+  functions and the same Stern Robin boundary condition. This is the validation
+  workaround for the thin-EDL limit; the 2D Cartesian browser FEM remains the
+  exploratory geometry solver. The nonlinear cylindrical PB result remains
+  numerical; there is no simple planar Gouy-Chapman-style closed form for that
+  case.
 - Debye length is computed from temperature, relative permittivity, formula
   concentration, and electrolyte stoichiometry.
 - If the computed Debye length is too small for the fixed browser FEM mesh to
