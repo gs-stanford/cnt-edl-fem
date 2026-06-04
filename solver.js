@@ -38,10 +38,8 @@ const metrics = {
   cap: document.getElementById("metricCap"),
   error: document.getElementById("metricError"),
   access: document.getElementById("metricAccess"),
-  window: document.getElementById("metricWindow"),
   stern: document.getElementById("metricStern"),
   enrichmentCard: document.getElementById("metricEnrichmentCard"),
-  windowCard: document.getElementById("metricWindowCard"),
 };
 
 const outputs = {
@@ -52,8 +50,6 @@ const outputs = {
   enrichment: document.getElementById("enrichmentPlot"),
   enrichmentCaption: document.getElementById("enrichmentCaption"),
   enrichmentFigure: document.getElementById("enrichmentFigure"),
-  window: document.getElementById("windowPlot"),
-  windowFigure: document.getElementById("windowFigure"),
   benchmark: document.getElementById("benchmarkPlot"),
   benchmarkCaption: document.getElementById("benchmarkCaption"),
 };
@@ -908,9 +904,7 @@ async function runModel() {
     setStatus("Running bias sweep");
     await frame();
     const sweep = await runSweep(params, zTarget);
-    const windowSweep = runWindowSweep(params);
-
-    latestResult = { params: solvedParams, requestedParams: params, dhParams, nlpb, dh, metrics: currentMetrics, sweep, windowSweep, zTarget };
+    latestResult = { params: solvedParams, requestedParams: params, dhParams, nlpb, dh, metrics: currentMetrics, sweep, zTarget };
     updateAccessibilityNote(solvedParams);
     updateMetricCards(latestResult);
     drawAll(latestResult);
@@ -928,7 +922,6 @@ function deriveMetrics(params, nlpb, dh, zTarget, capacitanceStar = NaN) {
   const enrichment = enrichmentForPsi(nlpb.midPsi, zTarget);
   const error = Math.abs(nlpb.chargeStar - dh.chargeStar) / Math.max(1e-9, Math.abs(nlpb.chargeStar));
   const access = accessibilityRatio(params);
-  const windowScore = dopingWindowScore(enrichment, params.biasV, params);
   return {
     psiS: params.psiS,
     sternDropV: params.sternDropV,
@@ -939,7 +932,6 @@ function deriveMetrics(params, nlpb, dh, zTarget, capacitanceStar = NaN) {
     capacitanceStar,
     error,
     access,
-    windowScore,
   };
 }
 
@@ -968,23 +960,6 @@ function updateAccessibilityNote(params) {
     `d_ion,eff ≈ ${formatNumber(params.ionDiameterNm, 2)} nm. ` +
     `h_eff / d_ion,eff = ${formatNumber(ratio, 2)} (${accessibilityLabel(params)}). ` +
     "The PB source uses valence/stoichiometry; ion identity enters through accessibility and geometry.";
-}
-
-function dopingWindowScore(_enrichment, biasV, params) {
-  const v = Math.abs(biasV);
-  const access = Math.max(0.35, Math.min(3.5, accessibilityRatio(params)));
-  const driveScale = 0.08 + 0.06 / access;
-  const drive = 1 - Math.exp(-((v / driveScale) ** 2));
-  const crowdingOnset = 0.45 + 0.22 * access;
-  const crowdingPenalty = 1 / (1 + (v / crowdingOnset) ** 3);
-  const stabilityWidth = Math.max(0.04, 0.04 * params.stabilityLimitV);
-  const stabilityPenalty = 1 / (1 + Math.exp((v - params.stabilityLimitV) / stabilityWidth));
-  return Math.max(0, Math.min(1, drive * crowdingPenalty * stabilityPenalty));
-}
-
-function crowdingEnrichmentLimit(params) {
-  const ratio = accessibilityRatio(params);
-  return Math.max(2, 2.5 + 2.5 * Math.min(ratio, 3));
 }
 
 async function runSweep(params, zTarget) {
@@ -1016,7 +991,6 @@ async function runSweep(params, zTarget) {
       overlap: nlpb.overlap,
       enrichment,
       dhError: error,
-      windowScore: dopingWindowScore(enrichment, p.biasV, params),
     });
     if (i % 3 === 2) {
       setStatus(`Sweep ${i + 1}/${biasValues.length}`);
@@ -1025,25 +999,6 @@ async function runSweep(params, zTarget) {
   }
   computeSweepCapacitance(rows);
   return rows;
-}
-
-function runWindowSweep(params) {
-  const sign = attractiveBiasSign(params.targetIonZ);
-  return linspace(0, params.stabilityLimitV, params.sweepPoints).map((biasAbsV) => {
-    const biasV = sign * biasAbsV;
-    const p = cloneParamsWithMetalBias(params, biasV, "nlpb");
-    return {
-      psiS: p.psiS,
-      psiAbs: Math.abs(p.psiS),
-      metalPsi: p.metalPsi,
-      metalPsiAbs: Math.abs(p.metalPsi),
-      biasV,
-      biasAbsV,
-      diffuseBiasV: p.diffuseBiasV,
-      sternDropV: p.sternDropV,
-      windowScore: dopingWindowScore(NaN, biasV, params),
-    };
-  });
 }
 
 function computeSweepCapacitance(rows) {
@@ -1075,7 +1030,6 @@ function updateMetricCards(result) {
     : "--";
   metrics.error.textContent = `${formatNumber(100 * result.metrics.error, 1)}%`;
   metrics.access.textContent = accessibilityLabel(result.params);
-  updateWindowMetricFromBias(result, Math.abs(result.params.biasV));
 }
 
 function updateMetricCardsFromSweep(result, metalBiasV) {
@@ -1091,13 +1045,7 @@ function updateMetricCardsFromSweep(result, metalBiasV) {
   metrics.cap.textContent = Number.isFinite(row.cStar) ? formatNumber(row.cStar, 3) : "--";
   metrics.error.textContent = `${formatNumber(100 * row.dhError, 1)}%`;
   metrics.access.textContent = accessibilityLabel(result.params);
-  updateWindowMetricFromBias(result, Math.abs(metalBiasV));
   return true;
-}
-
-function updateWindowMetricFromBias(result, biasAbsV) {
-  const row = interpolateSweepRowByKey(result.windowSweep || result.sweep, biasAbsV, "biasAbsV");
-  metrics.window.textContent = formatNumber(row?.windowScore, 2);
 }
 
 function nearestSweepRowByKey(rows, value, keyName) {
@@ -1192,30 +1140,13 @@ function drawAll(result) {
       referenceLabel: "bulk",
       showLegend: false,
     });
-    drawSvgLinePlot(outputs.window, {
-      rows: result.windowSweep || result.sweep,
-      xKey: "biasAbsV",
-      series: [{ key: "windowScore", label: "window score", color: "#19724a", axis: "left" }],
-      xLabel: "|ψₘ| (V)",
-      yLabel: "S_w*",
-      xLabelParts: mathVoltageMagnitudeParts(),
-      yLabelParts: mathWindowScoreParts(),
-      currentX: currentBiasAbsV,
-      xMinZero: true,
-      xFixedRange: [0, result.params.stabilityLimitV],
-      yFixedRange: [0, 1],
-      preferredYTickStep: 0.25,
-      showLegend: false,
-    });
   }
   drawSingleCylinderBenchmark(outputs.benchmark, result);
 }
 
 function updateOneCylinderVisibility(oneCylinder) {
   metrics.enrichmentCard?.classList.toggle("hidden", oneCylinder);
-  metrics.windowCard?.classList.toggle("hidden", oneCylinder);
   outputs.enrichmentFigure?.classList.toggle("hidden", oneCylinder);
-  outputs.windowFigure?.classList.toggle("hidden", oneCylinder);
 }
 
 function drawSingleCylinderBenchmark(svg, result) {
@@ -1787,14 +1718,6 @@ function mathNMidNInfParts() {
   ];
 }
 
-function mathWindowScoreParts() {
-  return [
-    { text: "S" },
-    { text: "w", sub: true },
-    { text: "*", sup: true },
-  ];
-}
-
 function mathQDhParts() {
   return [
     { text: "q" },
@@ -1832,7 +1755,7 @@ function interpolateSweepRowByKey(rows, value, keyName) {
     if (value >= lo[keyName] && value <= hi[keyName]) {
       const t = (value - lo[keyName]) / Math.max(1e-12, hi[keyName] - lo[keyName]);
       const out = { [keyName]: value };
-      for (const key of ["psiS", "psiAbs", "metalPsi", "metalPsiAbs", "biasMv", "biasV", "biasAbsV", "diffuseBiasV", "sternDropV", "qStar", "qDhStar", "cStar", "midPsi", "overlap", "enrichment", "dhError", "windowScore"]) {
+      for (const key of ["psiS", "psiAbs", "metalPsi", "metalPsiAbs", "biasMv", "biasV", "biasAbsV", "diffuseBiasV", "sternDropV", "qStar", "qDhStar", "cStar", "midPsi", "overlap", "enrichment", "dhError"]) {
         if (Number.isFinite(lo[key]) && Number.isFinite(hi[key])) {
           out[key] = lo[key] + t * (hi[key] - lo[key]);
         }
@@ -2109,7 +2032,6 @@ function exportCsv() {
     "overlap_metric",
     "target_ion_enrichment",
     "dh_relative_charge_error",
-    "doping_window_score",
   ];
   const lines = [header.join(",")];
   for (const row of latestResult.sweep) {
@@ -2129,7 +2051,6 @@ function exportCsv() {
       row.overlap,
       row.enrichment,
       row.dhError,
-      row.windowScore,
     ].join(","));
   }
   const blob = new Blob([`${lines.join("\n")}\n`], { type: "text/csv" });

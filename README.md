@@ -36,9 +36,6 @@ Then open `http://localhost:8088`.
   concentration, and electrolyte stoichiometry.
 - Bias sweeps follow the attractive doping direction: positive for anion
   targets and negative for cation targets, plotted against absolute metal bias.
-- The doping-window score is a heuristic diagnostic: low bias is penalized by
-  weak enrichment, while high bias is penalized by crowding and the selected
-  electrolyte stability limit.
 - Anion presets use the supplied DFT nearest intertube C-C distances as
   `h_eff` where available:
   - TFSI: 0.7070837 nm
