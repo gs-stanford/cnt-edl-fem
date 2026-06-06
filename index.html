@@ -105,13 +105,6 @@
         <section class="control-section">
           <h2>Numerics</h2>
           <label>
-            Plot units
-            <select id="plotUnitMode">
-              <option value="nondim" selected>Nondimensional</option>
-              <option value="dim">Dimensional</option>
-            </select>
-          </label>
-          <label>
             Mesh resolution
             <select id="meshResolution">
               <option value="coarse">Fast</option>
@@ -160,10 +153,6 @@
             <strong id="metricLambda">--</strong>
           </div>
           <div class="metric">
-            <span>Solver length, <span class="latex">&lambda;<sub>D,solve</sub></span> (nm)</span>
-            <strong id="metricSolverLambda">--</strong>
-          </div>
-          <div class="metric">
             <span>Accessible gap, <span class="latex">h<sub>eff</sub></span> (nm)</span>
             <strong id="metricGap">--</strong>
           </div>
@@ -187,10 +176,20 @@
             <span>DH charge error, <span class="latex">&epsilon;<sub>q</sub></span></span>
             <strong id="metricError">--</strong>
           </div>
-          <div class="metric">
-            <span>Accessibility</span>
-            <strong id="metricAccess">--</strong>
+        </section>
+
+        <section class="plot-toolbar" aria-label="Plot display controls">
+          <div>
+            <div class="toolbar-title">Plot Display</div>
+            <p>Switch plot axes without rerunning the FEM sweep.</p>
           </div>
+          <label class="plot-unit-control">
+            Units
+            <select id="plotUnitMode">
+              <option value="nondim" selected>Nondimensional</option>
+              <option value="dim">Dimensional</option>
+            </select>
+          </label>
         </section>
 
         <section class="figure-grid">

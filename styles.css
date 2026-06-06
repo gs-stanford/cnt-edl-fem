@@ -1,14 +1,15 @@
 :root {
-  --bg: #f7f4ed;
+  --bg: #f4f6f8;
   --panel: #ffffff;
   --ink: #111827;
-  --muted: #5c6676;
-  --line: #d8d2c6;
+  --muted: #5b6678;
+  --line: #d9e0e7;
   --green: #19724a;
   --blue: #064f9e;
   --red: #a11c1c;
   --amber: #bd6b0d;
-  --shadow: 0 18px 40px rgba(17, 24, 39, 0.08);
+  --shadow: 0 18px 44px rgba(17, 24, 39, 0.10);
+  --soft-shadow: 0 8px 24px rgba(17, 24, 39, 0.07);
 }
 
 * {
@@ -17,7 +18,8 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    linear-gradient(180deg, #f8fafc 0%, var(--bg) 42%, #eef2f6 100%);
   color: var(--ink);
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -38,8 +40,9 @@ textarea {
 .controls {
   border-right: 1px solid var(--line);
   padding: 24px 22px;
-  background: #fbfaf6;
+  background: rgba(255, 255, 255, 0.82);
   overflow-y: auto;
+  box-shadow: 10px 0 28px rgba(17, 24, 39, 0.04);
 }
 
 .brand {
@@ -106,13 +109,22 @@ select,
 textarea {
   display: block;
   width: 100%;
-  border: 1px solid #c8c0b4;
+  border: 1px solid #cbd5df;
   border-radius: 6px;
   background: #fff;
   color: var(--ink);
   padding: 9px 10px;
   margin-top: 6px;
   font-weight: 500;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #4e82c2;
+  box-shadow: 0 0 0 3px rgba(6, 79, 158, 0.14);
+  outline: none;
 }
 
 input[type="range"] {
@@ -146,16 +158,18 @@ button {
   min-height: 42px;
   border: 0;
   border-radius: 7px;
-  background: var(--ink);
+  background: linear-gradient(180deg, #162033 0%, #0f172a 100%);
   color: white;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: var(--soft-shadow);
 }
 
 button.secondary {
   margin-top: 10px;
-  background: #e9e3d8;
+  background: #e6edf3;
   color: var(--ink);
+  box-shadow: none;
 }
 
 button:disabled {
@@ -195,17 +209,29 @@ button:disabled {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .metric {
-  min-height: 74px;
+  position: relative;
+  min-height: 82px;
   border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--panel);
-  padding: 13px 12px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  padding: 15px 14px 13px;
+  box-shadow: var(--soft-shadow);
+  overflow: hidden;
+}
+
+.metric::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--blue), var(--green));
+  opacity: 0.82;
 }
 
 .metric > span {
@@ -222,7 +248,8 @@ button:disabled {
 .metric strong {
   display: block;
   margin-top: 9px;
-  font-size: 22px;
+  font-size: 24px;
+  letter-spacing: -0.01em;
 }
 
 .latex,
@@ -239,6 +266,46 @@ var sup {
   font-style: normal;
 }
 
+.plot-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 4px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 12px 14px;
+  box-shadow: var(--soft-shadow);
+}
+
+.toolbar-title {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.plot-toolbar p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.plot-unit-control {
+  display: grid;
+  grid-template-columns: auto minmax(170px, 210px);
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.plot-unit-control select {
+  margin-top: 0;
+  border-radius: 999px;
+  padding: 8px 34px 8px 12px;
+  font-weight: 700;
+}
+
 .figure-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -249,7 +316,7 @@ var sup {
   margin: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel);
+  background: rgba(255, 255, 255, 0.94);
   box-shadow: var(--shadow);
   overflow: hidden;
 }
@@ -263,8 +330,9 @@ figcaption {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid #ece6dc;
+  padding: 14px 16px 11px;
+  border-bottom: 1px solid #e7edf3;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
 }
 
 figcaption span {
@@ -307,7 +375,7 @@ canvas {
 }
 
 .plot-svg .grid {
-  stroke: var(--line);
+  stroke: #dbe3eb;
   stroke-width: 1;
 }
 
@@ -321,8 +389,9 @@ canvas {
   margin-top: 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.94);
   padding: 18px;
+  box-shadow: var(--soft-shadow);
 }
 
 .theory-panel p {
@@ -382,6 +451,15 @@ canvas {
 
   .metrics {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .plot-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plot-unit-control {
+    grid-template-columns: 1fr;
   }
 
   .figure-grid {

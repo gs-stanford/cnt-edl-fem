@@ -33,14 +33,12 @@ const controls = {
 const metrics = {
   psi: document.getElementById("metricPsi"),
   lambda: document.getElementById("metricLambda"),
-  solverLambda: document.getElementById("metricSolverLambda"),
   gap: document.getElementById("metricGap"),
   overlap: document.getElementById("metricOverlap"),
   enrichment: document.getElementById("metricEnrichment"),
   charge: document.getElementById("metricCharge"),
   cap: document.getElementById("metricCap"),
   error: document.getElementById("metricError"),
-  access: document.getElementById("metricAccess"),
   stern: document.getElementById("metricStern"),
   enrichmentCard: document.getElementById("metricEnrichmentCard"),
 };
@@ -1141,9 +1139,6 @@ function updateMetricCards(result) {
   metrics.psi.textContent = formatNumber(result.params.diffuseBiasV, 3);
   metrics.stern.textContent = formatNumber(result.metrics.sternDropV, 3);
   metrics.lambda.textContent = formatNumber(result.params.debyeNm, 3);
-  metrics.solverLambda.textContent = result.params.debyeCapActive
-    ? `${formatNumber(result.params.solverDebyeNm, 3)} cap`
-    : formatNumber(result.params.solverDebyeNm, 3);
   metrics.gap.textContent = formatNumber(result.params.gapNm, 3);
   metrics.overlap.textContent = formatNumber(result.metrics.midPotentialMv, 2);
   metrics.enrichment.textContent = formatNumber(result.metrics.enrichment, 2) + "x";
@@ -1152,7 +1147,6 @@ function updateMetricCards(result) {
     ? formatNumber(result.metrics.capacitanceAreaFpm2, 3)
     : "--";
   metrics.error.textContent = `${formatNumber(100 * result.metrics.error, 1)}%`;
-  metrics.access.textContent = accessibilityLabel(result.params);
 }
 
 function updateMetricCardsFromSweep(result, metalBiasV) {
@@ -1161,16 +1155,12 @@ function updateMetricCardsFromSweep(result, metalBiasV) {
   metrics.psi.textContent = formatNumber(row.diffuseBiasV, 3);
   metrics.stern.textContent = formatNumber(row.sternDropV, 3);
   metrics.lambda.textContent = formatNumber(result.params.debyeNm, 3);
-  metrics.solverLambda.textContent = result.params.debyeCapActive
-    ? `${formatNumber(result.params.solverDebyeNm, 3)} cap`
-    : formatNumber(result.params.solverDebyeNm, 3);
   metrics.gap.textContent = formatNumber(result.params.gapNm, 3);
   metrics.overlap.textContent = formatNumber(row.midPotentialMv, 2);
   metrics.enrichment.textContent = formatNumber(row.enrichment, 2) + "x";
   metrics.charge.textContent = formatNumber(row.sigmaAvgCpm2, 3);
   metrics.cap.textContent = Number.isFinite(row.cAreaFpm2) ? formatNumber(row.cAreaFpm2, 3) : "--";
   metrics.error.textContent = `${formatNumber(100 * row.dhError, 1)}%`;
-  metrics.access.textContent = accessibilityLabel(result.params);
   return true;
 }
 
