@@ -23,6 +23,7 @@ const controls = {
   ionDiameterControl: document.getElementById("ionDiameterControl"),
   customSpeciesControl: document.getElementById("customSpeciesControl"),
   customSpeciesHelp: document.getElementById("customSpeciesHelp"),
+  plotUnitMode: document.getElementById("plotUnitMode"),
   meshResolution: document.getElementById("meshResolution"),
   sweepPoints: document.getElementById("sweepPoints"),
   runButton: document.getElementById("runButton"),
@@ -980,17 +981,63 @@ function deriveMetrics(params, nlpb, dh, zTarget, capacitanceStar = NaN) {
   const enrichment = enrichmentForPsi(nlpb.midPsi, zTarget);
   const error = Math.abs(nlpb.chargeStar - dh.chargeStar) / Math.max(1e-9, Math.abs(nlpb.chargeStar));
   const access = accessibilityRatio(params);
+  const sigmaAvgCpm2 = averageSurfaceChargeCpm2(nlpb.chargeStar, params);
+  const capacitanceAreaFpm2 = areaCapacitanceFpm2(capacitanceStar, params);
   return {
     psiS: params.psiS,
+    diffuseBiasV: params.diffuseBiasV,
     sternDropV: params.sternDropV,
     hStar: params.gapStar,
+    gapNm: params.gapNm,
     overlap: nlpb.overlap,
+    midPsi: nlpb.midPsi,
+    midPotentialMv: nlpb.midPsi * params.thermalMv,
     enrichment,
     chargeStar: nlpb.chargeStar,
     capacitanceStar,
+    sigmaAvgCpm2,
+    capacitanceAreaFpm2,
     error,
     access,
   };
+}
+
+function thermalVoltageV(params) {
+  return params.thermalMv / 1000;
+}
+
+function surfaceLengthStar(params) {
+  return Math.max(1e-12, params.cylinderCount * 2 * Math.PI * params.radiusStar);
+}
+
+function surfaceChargeScaleCpm2(params) {
+  const epsilon = params.epsilonR * EPS0;
+  return epsilon * thermalVoltageV(params) / (params.solverDebyeNm * 1e-9);
+}
+
+function averageSurfaceChargeCpm2(qStar, params) {
+  if (!Number.isFinite(qStar)) return NaN;
+  return qStar * surfaceChargeScaleCpm2(params) / surfaceLengthStar(params);
+}
+
+function areaCapacitanceFpm2(cStar, params) {
+  if (!Number.isFinite(cStar)) return NaN;
+  return cStar * surfaceChargeScaleCpm2(params) / (surfaceLengthStar(params) * thermalVoltageV(params));
+}
+
+function addDimensionalSweepValues(rows, params) {
+  for (const row of rows) {
+    row.diffusePotentialV = row.psiS * thermalVoltageV(params);
+    row.midPotentialV = row.midPsi * thermalVoltageV(params);
+    row.midPotentialMv = row.midPsi * params.thermalMv;
+    row.qAbsStar = Math.abs(row.qStar);
+    row.qDhAbsStar = Math.abs(row.qDhStar);
+    row.sigmaAvgCpm2 = averageSurfaceChargeCpm2(row.qStar, params);
+    row.sigmaAbsCpm2 = Math.abs(row.sigmaAvgCpm2);
+    row.sigmaDhAvgCpm2 = averageSurfaceChargeCpm2(row.qDhStar, params);
+    row.cAreaFpm2 = areaCapacitanceFpm2(row.cStar, params);
+    row.cAreaAbsFpm2 = Math.abs(row.cAreaFpm2);
+  }
 }
 
 function accessibilityRatio(params) {
@@ -1067,6 +1114,7 @@ async function runSweep(params, zTarget) {
     }
   }
   computeSweepCapacitance(rows);
+  addDimensionalSweepValues(rows, params);
   return rows;
 }
 
@@ -1087,18 +1135,19 @@ function computeSweepCapacitance(rows) {
 function updateMetricCards(result) {
   const nearest = nearestSweepRowByKey(result.sweep, Math.abs(result.params.biasV), "biasAbsV");
   result.metrics.capacitanceStar = nearest?.cStar ?? NaN;
-  metrics.psi.textContent = formatNumber(result.metrics.psiS, 3);
+  result.metrics.capacitanceAreaFpm2 = nearest?.cAreaFpm2 ?? NaN;
+  metrics.psi.textContent = formatNumber(result.params.diffuseBiasV, 3);
   metrics.stern.textContent = formatNumber(result.metrics.sternDropV, 3);
   metrics.lambda.textContent = formatNumber(result.params.debyeNm, 3);
   metrics.solverLambda.textContent = result.params.debyeCapActive
     ? `${formatNumber(result.params.solverDebyeNm, 3)} cap`
     : formatNumber(result.params.solverDebyeNm, 3);
-  metrics.gap.textContent = formatNumber(result.metrics.hStar, 3);
-  metrics.overlap.textContent = formatNumber(result.metrics.overlap, 3);
+  metrics.gap.textContent = formatNumber(result.params.gapNm, 3);
+  metrics.overlap.textContent = formatNumber(result.metrics.midPotentialMv, 2);
   metrics.enrichment.textContent = formatNumber(result.metrics.enrichment, 2) + "x";
-  metrics.charge.textContent = formatNumber(result.metrics.chargeStar, 3);
-  metrics.cap.textContent = Number.isFinite(result.metrics.capacitanceStar)
-    ? formatNumber(result.metrics.capacitanceStar, 3)
+  metrics.charge.textContent = formatNumber(result.metrics.sigmaAvgCpm2, 3);
+  metrics.cap.textContent = Number.isFinite(result.metrics.capacitanceAreaFpm2)
+    ? formatNumber(result.metrics.capacitanceAreaFpm2, 3)
     : "--";
   metrics.error.textContent = `${formatNumber(100 * result.metrics.error, 1)}%`;
   metrics.access.textContent = accessibilityLabel(result.params);
@@ -1107,17 +1156,17 @@ function updateMetricCards(result) {
 function updateMetricCardsFromSweep(result, metalBiasV) {
   const row = interpolateSweepRowByKey(result.sweep, Math.abs(metalBiasV), "biasAbsV");
   if (!row) return;
-  metrics.psi.textContent = formatNumber(row.psiS, 3);
+  metrics.psi.textContent = formatNumber(row.diffuseBiasV, 3);
   metrics.stern.textContent = formatNumber(row.sternDropV, 3);
   metrics.lambda.textContent = formatNumber(result.params.debyeNm, 3);
   metrics.solverLambda.textContent = result.params.debyeCapActive
     ? `${formatNumber(result.params.solverDebyeNm, 3)} cap`
     : formatNumber(result.params.solverDebyeNm, 3);
-  metrics.gap.textContent = formatNumber(result.params.gapStar, 3);
-  metrics.overlap.textContent = formatNumber(row.overlap, 3);
+  metrics.gap.textContent = formatNumber(result.params.gapNm, 3);
+  metrics.overlap.textContent = formatNumber(row.midPotentialMv, 2);
   metrics.enrichment.textContent = formatNumber(row.enrichment, 2) + "x";
-  metrics.charge.textContent = formatNumber(row.qStar, 3);
-  metrics.cap.textContent = Number.isFinite(row.cStar) ? formatNumber(row.cStar, 3) : "--";
+  metrics.charge.textContent = formatNumber(row.sigmaAvgCpm2, 3);
+  metrics.cap.textContent = Number.isFinite(row.cAreaFpm2) ? formatNumber(row.cAreaFpm2, 3) : "--";
   metrics.error.textContent = `${formatNumber(100 * row.dhError, 1)}%`;
   metrics.access.textContent = accessibilityLabel(result.params);
   return true;
@@ -1154,26 +1203,34 @@ function formatTick(value) {
 function drawAll(result) {
   const currentBiasAbsV = Math.abs(Number(controls.biasMv.value));
   const oneCylinder = result.params.cylinderCount === 1;
+  const dimensionalPlots = controls.plotUnitMode.value === "dim";
   updateOneCylinderVisibility(oneCylinder);
   drawPotential(outputs.potential, result);
   drawSvgLinePlot(outputs.qc, {
     rows: result.sweep,
     xKey: "biasAbsV",
-    series: [
-      { key: "qStar", label: "q′*", color: "#064f9e", axis: "left" },
-      { key: "cStar", label: "c′*", color: "#19724a", axis: "right" },
-    ],
+    series: dimensionalPlots
+      ? [
+        { key: "sigmaAbsCpm2", label: "|σ_avg|", color: "#064f9e", axis: "left" },
+        { key: "cAreaFpm2", label: "C_A", color: "#19724a", axis: "right" },
+      ]
+      : [
+        { key: "qAbsStar", label: "|q′*|", color: "#064f9e", axis: "left" },
+        { key: "cStar", label: "c′*", color: "#19724a", axis: "right" },
+      ],
     xLabel: "|ψₘ| (V)",
-    yLabel: "q′*",
-    rightYLabel: "c′*",
+    yLabel: dimensionalPlots ? "|σ_avg| (C/m²)" : "|q′*|",
+    rightYLabel: dimensionalPlots ? "C_A (F/m²)" : "c′*",
     xLabelParts: mathVoltageMagnitudeParts(),
+    yLabelParts: dimensionalPlots ? mathSigmaAvgAbsParts() : mathQAbsParts(),
+    rightYLabelParts: dimensionalPlots ? mathAreaCapacitanceParts() : mathCStarParts(),
     currentX: currentBiasAbsV,
     xMinZero: true,
     xFixedRange: [0, result.params.stabilityLimitV],
     yMinZero: true,
     rightYMinZero: true,
   });
-  drawSvgTrajectory(outputs.trajectory, result.sweep, currentBiasAbsV);
+  drawSvgTrajectory(outputs.trajectory, result.sweep, currentBiasAbsV, dimensionalPlots);
   drawSvgLinePlot(outputs.error, {
     rows: result.sweep,
     xKey: "biasAbsV",
@@ -1216,7 +1273,7 @@ function drawAll(result) {
       showLegend: false,
     });
   }
-  drawSingleCylinderBenchmark(outputs.benchmark, result);
+  drawSingleCylinderBenchmark(outputs.benchmark, result, dimensionalPlots);
 }
 
 function updateOneCylinderVisibility(oneCylinder) {
@@ -1224,7 +1281,7 @@ function updateOneCylinderVisibility(oneCylinder) {
   outputs.enrichmentFigure?.classList.toggle("hidden", oneCylinder);
 }
 
-function drawSingleCylinderBenchmark(svg, result) {
+function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
   if (!svg) return;
   if (result.params.cylinderCount !== 1 || result.dh.mesh.centers.length !== 1) {
     const { plot } = clearSvg(svg);
@@ -1264,14 +1321,19 @@ function drawSingleCylinderBenchmark(svg, result) {
   drawSvgLinePlot(svg, {
     rows: benchmark.rows,
     xKey: "biasAbsV",
-    series: [
-      { key: "analyticQAbs", label: "analytic DH", color: "#111827", axis: "left" },
-      { key: "radialQAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
-    ],
+    series: dimensionalPlots
+      ? [
+        { key: "analyticSigmaAbs", label: "analytic DH", color: "#111827", axis: "left" },
+        { key: "radialSigmaAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
+      ]
+      : [
+        { key: "analyticQAbs", label: "analytic DH", color: "#111827", axis: "left" },
+        { key: "radialQAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
+      ],
     xLabel: "|ψₘ| (V)",
-    yLabel: "q_DH*",
+    yLabel: dimensionalPlots ? "|σ_DH| (C/m²)" : "|q_DH*|",
     xLabelParts: mathVoltageMagnitudeParts(),
-    yLabelParts: mathQDhParts(),
+    yLabelParts: dimensionalPlots ? mathSigmaDhAbsParts() : mathQDhAbsParts(),
     xMinZero: true,
     xFixedRange: [0, result.params.stabilityLimitV],
     yMinZero: true,
@@ -1295,6 +1357,14 @@ function singleCylinderRadialDhBenchmark(result) {
     const radial = radialDhCharge(row.metalPsi, physicalRadiusStar, physicalSternDelta);
     if (!Number.isFinite(reference.qStar) || !Number.isFinite(radial.qStar)) continue;
     const chargeError = Math.abs(radial.qStar - reference.qStar) / Math.max(1e-12, Math.abs(reference.qStar));
+    const benchmarkParams = {
+      ...result.params,
+      radiusStar: physicalRadiusStar,
+      solverDebyeNm: result.params.debyeNm,
+      cylinderCount: 1,
+    };
+    const analyticSigma = averageSurfaceChargeCpm2(reference.qStar, benchmarkParams);
+    const radialSigma = averageSurfaceChargeCpm2(radial.qStar, benchmarkParams);
     if (Math.abs(reference.qStar) > 1e-9) {
       errorSum += chargeError;
       errorCount += 1;
@@ -1303,6 +1373,8 @@ function singleCylinderRadialDhBenchmark(result) {
       biasAbsV: row.biasAbsV,
       radialQAbs: Math.abs(radial.qStar),
       analyticQAbs: Math.abs(reference.qStar),
+      radialSigmaAbs: Math.abs(radialSigma),
+      analyticSigmaAbs: Math.abs(analyticSigma),
       chargeError,
     });
   }
@@ -1400,7 +1472,8 @@ function drawPotential(canvas, result) {
   const { mesh } = result.nlpb;
   const plot = aspectFitPlot(canvas, mesh);
   const image = ctx.createImageData(plot.w, plot.h);
-  const maxAbs = Math.max(0.2, Math.abs(result.params.psiS));
+  const thermalV = thermalVoltageV(result.params);
+  const colorLimitV = potentialColorLimitV(result);
   for (let py = 0; py < plot.h; py += 1) {
     const y = mesh.maxY - (py / (plot.h - 1)) * (mesh.maxY - mesh.minY);
     for (let px = 0; px < plot.w; px += 1) {
@@ -1411,7 +1484,7 @@ function drawPotential(canvas, result) {
         rgb = [16, 24, 39];
       } else {
         const psi = interpolatePotential(mesh, result.nlpb.potential, x, y);
-        rgb = divergingColor(psi / maxAbs);
+        rgb = divergingColor((psi * thermalV) / colorLimitV);
       }
       const idx = 4 * (py * plot.w + px);
       image.data[idx] = rgb[0];
@@ -1424,6 +1497,7 @@ function drawPotential(canvas, result) {
   ctx.strokeStyle = "#111827";
   ctx.lineWidth = 1.2;
   ctx.strokeRect(plot.x, plot.y, plot.w, plot.h);
+  drawPotentialContours(ctx, result, plot);
 
   for (const c of mesh.centers) {
     const cx = map(c.x, mesh.minX, mesh.maxX, plot.x, plot.x + plot.w);
@@ -1438,16 +1512,101 @@ function drawPotential(canvas, result) {
     ctx.stroke();
   }
 
-  drawColorbar(ctx, canvas.width - 56, plot.y, 14, plot.h, maxAbs);
+  drawColorbar(ctx, canvas.width - 68, plot.y, 14, plot.h, colorLimitV, "V");
   ctx.fillStyle = "#111827";
   ctx.font = "700 13px Arial";
   ctx.fillText(mesh.centers.length === 1 ? "isolated CNT cylinder" : "same-bias CNT cylinders", plot.x + 10, plot.y + 20);
   ctx.fillStyle = "#5c6676";
   ctx.font = "12px Arial";
   const geometryText = mesh.centers.length === 1
-    ? `a*=${formatNumber(mesh.a, 2)}`
-    : `a*=${formatNumber(mesh.a, 2)}, h*=${formatNumber(mesh.h, 2)}`;
+    ? `a=${formatNumber(0.5 * result.params.diameterNm, 2)} nm`
+    : `a=${formatNumber(0.5 * result.params.diameterNm, 2)} nm, h=${formatNumber(result.params.gapNm, 2)} nm`;
   ctx.fillText(geometryText, plot.x + 10, plot.y + 38);
+}
+
+function potentialColorLimitV(result) {
+  const requested = Math.abs(Number(controls.biasMv.value) || result.params.biasV || 0);
+  const solved = Math.abs(result.params.diffuseBiasV || 0);
+  return Math.max(0.05, requested, solved);
+}
+
+function drawPotentialContours(ctx, result, plot) {
+  const { mesh } = result.nlpb;
+  const thermalV = thermalVoltageV(result.params);
+  const fieldLimit = Math.abs(result.params.diffuseBiasV || 0);
+  if (!Number.isFinite(fieldLimit) || fieldLimit < 0.01) return;
+  const sign = Math.sign(result.params.biasV || result.params.diffuseBiasV || 1);
+  const levels = [0.25, 0.5, 0.75].map((fraction) => sign * fraction * fieldLimit);
+  ctx.save();
+  ctx.strokeStyle = sign >= 0 ? "rgba(115, 26, 26, 0.55)" : "rgba(6, 79, 158, 0.55)";
+  ctx.lineWidth = 1;
+
+  for (const level of levels) {
+    for (let j = 0; j < mesh.ny - 1; j += 1) {
+      for (let i = 0; i < mesh.nx - 1; i += 1) {
+        const x0 = mesh.minX + i * mesh.dx;
+        const x1 = x0 + mesh.dx;
+        const y0 = mesh.minY + j * mesh.dy;
+        const y1 = y0 + mesh.dy;
+        const cx = 0.5 * (x0 + x1);
+        const cy = 0.5 * (y0 + y1);
+        if (insideCylinderIndex(cx, cy, mesh.centers, mesh.a * 1.03) >= 0) continue;
+        const values = [
+          result.nlpb.potential[j * mesh.nx + i] * thermalV,
+          result.nlpb.potential[j * mesh.nx + i + 1] * thermalV,
+          result.nlpb.potential[(j + 1) * mesh.nx + i + 1] * thermalV,
+          result.nlpb.potential[(j + 1) * mesh.nx + i] * thermalV,
+        ];
+        const points = contourCellPoints(
+          [
+            { x: x0, y: y0, v: values[0] },
+            { x: x1, y: y0, v: values[1] },
+            { x: x1, y: y1, v: values[2] },
+            { x: x0, y: y1, v: values[3] },
+          ],
+          level,
+          mesh,
+          plot,
+        );
+        if (points.length === 2) drawContourSegment(ctx, points[0], points[1]);
+        if (points.length === 4) {
+          drawContourSegment(ctx, points[0], points[1]);
+          drawContourSegment(ctx, points[2], points[3]);
+        }
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function contourCellPoints(corners, level, mesh, plot) {
+  const edges = [[0, 1], [1, 2], [2, 3], [3, 0]];
+  const points = [];
+  for (const [a, b] of edges) {
+    const p0 = corners[a];
+    const p1 = corners[b];
+    const d0 = p0.v - level;
+    const d1 = p1.v - level;
+    if (d0 === 0 && d1 === 0) continue;
+    if (d0 * d1 > 0) continue;
+    const denom = p1.v - p0.v;
+    if (Math.abs(denom) < 1e-12) continue;
+    const t = Math.max(0, Math.min(1, (level - p0.v) / denom));
+    const x = p0.x + t * (p1.x - p0.x);
+    const y = p0.y + t * (p1.y - p0.y);
+    points.push({
+      x: map(x, mesh.minX, mesh.maxX, plot.x, plot.x + plot.w),
+      y: map(y, mesh.maxY, mesh.minY, plot.y, plot.y + plot.h),
+    });
+  }
+  return points;
+}
+
+function drawContourSegment(ctx, p0, p1) {
+  ctx.beginPath();
+  ctx.moveTo(p0.x, p0.y);
+  ctx.lineTo(p1.x, p1.y);
+  ctx.stroke();
 }
 
 function aspectFitPlot(canvas, mesh) {
@@ -1478,7 +1637,7 @@ function interpolateRgb(a, b, t) {
   return a.map((v, i) => Math.round(v + (b[i] - v) * t));
 }
 
-function drawColorbar(ctx, x, y, w, h, maxAbs) {
+function drawColorbar(ctx, x, y, w, h, maxAbs, unit = "") {
   const grad = ctx.createLinearGradient(0, y + h, 0, y);
   grad.addColorStop(0, "#064f9e");
   grad.addColorStop(0.5, "#fafafa");
@@ -1489,9 +1648,9 @@ function drawColorbar(ctx, x, y, w, h, maxAbs) {
   ctx.strokeRect(x, y, w, h);
   ctx.fillStyle = "#111827";
   ctx.font = "11px Arial";
-  ctx.fillText(`+${formatNumber(maxAbs, 1)}`, x - 4, y - 6);
+  ctx.fillText(`+${formatNumber(maxAbs, 2)} ${unit}`, x - 18, y - 6);
   ctx.fillText("0", x + w + 5, y + h / 2 + 4);
-  ctx.fillText(`-${formatNumber(maxAbs, 1)}`, x - 4, y + h + 16);
+  ctx.fillText(`-${formatNumber(maxAbs, 2)} ${unit}`, x - 18, y + h + 16);
 }
 
 function clearSvg(svg) {
@@ -1620,17 +1779,22 @@ function drawSvgReferenceLine(svg, plot, yRange, value, label, yScale = "linear"
   }
 }
 
-function drawSvgTrajectory(svg, rows, currentBiasAbsV) {
+function drawSvgTrajectory(svg, rows, currentBiasAbsV, dimensionalPlots) {
   const { plot } = clearSvg(svg);
-  const points = rows.filter((row) => Number.isFinite(row.qStar) && Number.isFinite(row.cStar));
-  const xRange = niceRange(Math.min(...points.map((p) => p.qStar)), Math.max(...points.map((p) => p.qStar)));
-  const yRange = niceRange(Math.min(...points.map((p) => p.cStar)), Math.max(...points.map((p) => p.cStar)));
-  drawSvgAxes(svg, plot, xRange, yRange, "q′*", "c′*", {});
+  const xKey = dimensionalPlots ? "sigmaAbsCpm2" : "qAbsStar";
+  const yKey = dimensionalPlots ? "cAreaFpm2" : "cStar";
+  const points = rows.filter((row) => Number.isFinite(row[xKey]) && Number.isFinite(row[yKey]));
+  const xRange = zeroMinRange(Math.max(...points.map((p) => p[xKey])));
+  const yRange = zeroMinRange(Math.max(...points.map((p) => p[yKey])));
+  drawSvgAxes(svg, plot, xRange, yRange, dimensionalPlots ? "|σ_avg| (C/m²)" : "|q′*|", dimensionalPlots ? "C_A (F/m²)" : "c′*", {
+    xLabelParts: dimensionalPlots ? mathSigmaAvgAbsParts() : mathQAbsParts(),
+    yLabelParts: dimensionalPlots ? mathAreaCapacitanceParts() : mathCStarParts(),
+  });
 
   const path = points
     .map((p, idx) => {
-      const x = map(p.qStar, xRange[0], xRange[1], plot.x, plot.x + plot.w);
-      const y = map(p.cStar, yRange[0], yRange[1], plot.y + plot.h, plot.y);
+      const x = map(p[xKey], xRange[0], xRange[1], plot.x, plot.x + plot.w);
+      const y = map(p[yKey], yRange[0], yRange[1], plot.y + plot.h, plot.y);
       return `${idx === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
     })
     .join(" ");
@@ -1646,8 +1810,8 @@ function drawSvgTrajectory(svg, rows, currentBiasAbsV) {
   points.forEach((p, idx) => {
     const t = idx / Math.max(1, points.length - 1);
     const [r, g, b] = interpolateRgb([6, 79, 158], [161, 28, 28], t);
-    const x = map(p.qStar, xRange[0], xRange[1], plot.x, plot.x + plot.w);
-    const y = map(p.cStar, yRange[0], yRange[1], plot.y + plot.h, plot.y);
+    const x = map(p[xKey], xRange[0], xRange[1], plot.x, plot.x + plot.w);
+    const y = map(p[yKey], yRange[0], yRange[1], plot.y + plot.h, plot.y);
     svg.appendChild(svgEl("circle", {
       cx: x,
       cy: y,
@@ -1657,9 +1821,9 @@ function drawSvgTrajectory(svg, rows, currentBiasAbsV) {
   });
 
   const current = interpolateSweepRowByKey(rows, currentBiasAbsV, "biasAbsV");
-  if (current && Number.isFinite(current.qStar) && Number.isFinite(current.cStar)) {
-    const cx = map(current.qStar, xRange[0], xRange[1], plot.x, plot.x + plot.w);
-    const cy = map(current.cStar, yRange[0], yRange[1], plot.y + plot.h, plot.y);
+  if (current && Number.isFinite(current[xKey]) && Number.isFinite(current[yKey])) {
+    const cx = map(current[xKey], xRange[0], xRange[1], plot.x, plot.x + plot.w);
+    const cy = map(current[yKey], yRange[0], yRange[1], plot.y + plot.h, plot.y);
     svg.appendChild(svgEl("circle", {
       cx,
       cy,
@@ -1785,11 +1949,51 @@ function mathNMidNInfParts() {
   ];
 }
 
-function mathQDhParts() {
+function mathQAbsParts() {
   return [
-    { text: "q" },
+    { text: "|q′" },
+    { text: "*", sup: true },
+    { text: "|" },
+  ];
+}
+
+function mathCStarParts() {
+  return [
+    { text: "c′" },
+    { text: "*", sup: true },
+  ];
+}
+
+function mathSigmaAvgAbsParts() {
+  return [
+    { text: "|σ" },
+    { text: "avg", sub: true },
+    { text: "| (C/m²)" },
+  ];
+}
+
+function mathAreaCapacitanceParts() {
+  return [
+    { text: "C" },
+    { text: "A", sub: true },
+    { text: " (F/m²)" },
+  ];
+}
+
+function mathQDhAbsParts() {
+  return [
+    { text: "|q" },
     { text: "DH", sub: true },
     { text: "*", sup: true },
+    { text: "|" },
+  ];
+}
+
+function mathSigmaDhAbsParts() {
+  return [
+    { text: "|σ" },
+    { text: "DH", sub: true },
+    { text: "| (C/m²)" },
   ];
 }
 
@@ -1822,7 +2026,33 @@ function interpolateSweepRowByKey(rows, value, keyName) {
     if (value >= lo[keyName] && value <= hi[keyName]) {
       const t = (value - lo[keyName]) / Math.max(1e-12, hi[keyName] - lo[keyName]);
       const out = { [keyName]: value };
-      for (const key of ["psiS", "psiAbs", "metalPsi", "metalPsiAbs", "biasMv", "biasV", "biasAbsV", "diffuseBiasV", "sternDropV", "qStar", "qDhStar", "cStar", "midPsi", "overlap", "enrichment", "dhError"]) {
+      for (const key of [
+        "psiS",
+        "psiAbs",
+        "metalPsi",
+        "metalPsiAbs",
+        "biasMv",
+        "biasV",
+        "biasAbsV",
+        "diffuseBiasV",
+        "sternDropV",
+        "qStar",
+        "qDhStar",
+        "qAbsStar",
+        "qDhAbsStar",
+        "cStar",
+        "midPsi",
+        "midPotentialV",
+        "midPotentialMv",
+        "overlap",
+        "enrichment",
+        "dhError",
+        "sigmaAvgCpm2",
+        "sigmaAbsCpm2",
+        "sigmaDhAvgCpm2",
+        "cAreaFpm2",
+        "cAreaAbsFpm2",
+      ]) {
         if (Number.isFinite(lo[key]) && Number.isFinite(hi[key])) {
           out[key] = lo[key] + t * (hi[key] - lo[key]);
         }
@@ -2098,7 +2328,11 @@ function exportCsv() {
     "q_star_nlpb",
     "q_star_dh",
     "c_star_total_wrt_metal_voltage",
+    "average_surface_charge_C_per_m2",
+    "dh_average_surface_charge_C_per_m2",
+    "area_capacitance_F_per_m2",
     "mid_gap_psi_star",
+    "mid_gap_potential_V",
     "overlap_metric",
     "target_ion_enrichment",
     "dh_relative_charge_error",
@@ -2120,7 +2354,11 @@ function exportCsv() {
       row.qStar,
       row.qDhStar,
       row.cStar,
+      row.sigmaAvgCpm2,
+      row.sigmaDhAvgCpm2,
+      row.cAreaFpm2,
       row.midPsi,
+      row.midPotentialV,
       row.overlap,
       row.enrichment,
       row.dhError,
@@ -2181,6 +2419,12 @@ function syncStabilityLimit() {
   if (latestResult) setStatus("Stability limit changed; run model to recompute");
 }
 
+function syncPlotUnits() {
+  if (!latestResult) return;
+  drawAll(latestResult);
+  setStatus(`Plot units: ${controls.plotUnitMode.value === "dim" ? "dimensional" : "nondimensional"}`);
+}
+
 function applyPresetDefaults() {
   const preset = controls.electrolytePreset.value;
   const isCustom = preset === "custom";
@@ -2236,6 +2480,7 @@ controls.biasSlider.addEventListener("input", syncBiasFromSlider);
 controls.biasMv.addEventListener("input", syncBiasFromNumber);
 controls.stabilityLimitV.addEventListener("input", syncStabilityLimit);
 controls.electrolytePreset.addEventListener("change", applyPresetDefaults);
+controls.plotUnitMode.addEventListener("change", syncPlotUnits);
 applyPresetDefaults();
 
 runModel();

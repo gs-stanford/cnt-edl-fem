@@ -105,6 +105,13 @@
         <section class="control-section">
           <h2>Numerics</h2>
           <label>
+            Plot units
+            <select id="plotUnitMode">
+              <option value="nondim" selected>Nondimensional</option>
+              <option value="dim">Dimensional</option>
+            </select>
+          </label>
+          <label>
             Mesh resolution
             <select id="meshResolution">
               <option value="coarse">Fast</option>
@@ -134,14 +141,14 @@
         <header class="topbar">
           <div>
             <div class="eyebrow">Outputs</div>
-            <h2>Overlap, charge, capacitance, and DH failure</h2>
+            <h2>Potential, charge, capacitance, and DH failure</h2>
           </div>
           <div id="status" class="status">Ready</div>
         </header>
 
         <section class="metrics" aria-label="Model metrics">
           <div class="metric">
-            <span>Diffuse potential, <span class="latex">&Psi;<sub>d</sub><sup>*</sup></span></span>
+            <span>Diffuse potential, <span class="latex">&psi;<sub>d</sub></span> (V)</span>
             <strong id="metricPsi">--</strong>
           </div>
           <div class="metric">
@@ -157,27 +164,27 @@
             <strong id="metricSolverLambda">--</strong>
           </div>
           <div class="metric">
-            <span>Gap ratio, <span class="latex">h<sup>*</sup>=h<sub>eff</sub>/&lambda;<sub>D</sub></span></span>
+            <span>Accessible gap, <span class="latex">h<sub>eff</sub></span> (nm)</span>
             <strong id="metricGap">--</strong>
           </div>
           <div class="metric">
-            <span>Overlap, <span class="latex">&Omega;<sub>&Psi;</sub><sup>*</sup></span></span>
+            <span>Mid-gap potential, <span class="latex">&psi;<sub>mid</sub></span> (mV)</span>
             <strong id="metricOverlap">--</strong>
           </div>
           <div id="metricEnrichmentCard" class="metric">
-            <span>Target-ion enrichment, <span class="latex">E<sub>mid</sub><sup>*</sup></span></span>
+            <span>Target-ion enrichment, <span class="latex">E<sub>mid</sub></span></span>
             <strong id="metricEnrichment">--</strong>
           </div>
           <div class="metric">
-            <span>Surface charge, <span class="latex">q&prime;<sup>*</sup></span></span>
+            <span>Average surface charge, <span class="latex">&sigma;<sub>avg</sub></span> (C/m<sup>2</sup>)</span>
             <strong id="metricCharge">--</strong>
           </div>
           <div class="metric">
-            <span>Capacitance, <span class="latex">c&prime;<sup>*</sup></span></span>
+            <span>Area capacitance, <span class="latex">C<sub>A</sub></span> (F/m<sup>2</sup>)</span>
             <strong id="metricCap">--</strong>
           </div>
           <div class="metric">
-            <span>DH charge error, <span class="latex">&epsilon;<sub>q</sub><sup>*</sup></span></span>
+            <span>DH charge error, <span class="latex">&epsilon;<sub>q</sub></span></span>
             <strong id="metricError">--</strong>
           </div>
           <div class="metric">
@@ -189,8 +196,8 @@
         <section class="figure-grid">
           <figure class="figure wide">
             <figcaption>
-              <span>Non-dimensional potential field</span>
-              <small>Nonlinear PB solution, <span class="latex">&Psi;<sup>*</sup>(x<sup>*</sup>, y<sup>*</sup>)</span></small>
+              <span>Potential field</span>
+              <small>Nonlinear PB solution, <span class="latex">&psi;(x,y)</span> in volts; color scale follows applied metal bias</small>
             </figcaption>
             <canvas id="potentialCanvas" width="1600" height="760"></canvas>
           </figure>
@@ -198,7 +205,7 @@
           <figure class="figure">
             <figcaption>
               <span>Charge and capacitance vs metal bias</span>
-              <small><span class="latex">q&prime;<sup>*</sup></span> and total <span class="latex">c&prime;<sup>*</sup></span> with Stern partition</small>
+              <small>charge and capacitance with selected plot units</small>
             </figcaption>
             <svg id="qcPlot" class="plot-svg" viewBox="0 0 520 360" role="img"></svg>
           </figure>
@@ -206,7 +213,7 @@
           <figure class="figure">
             <figcaption>
               <span>Bias trajectory</span>
-              <small><span class="latex">q&prime;<sup>*</sup></span> vs <span class="latex">c&prime;<sup>*</sup></span>; arrow follows increasing <span class="latex">|&Psi;<sub>s</sub><sup>*</sup>|</span></small>
+              <small>charge-capacitance trajectory; points follow increasing <span class="latex">|&psi;<sub>m</sub>|</span></small>
             </figcaption>
             <svg id="trajectoryPlot" class="plot-svg" viewBox="0 0 520 360" role="img"></svg>
           </figure>
