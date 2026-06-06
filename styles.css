@@ -1,15 +1,15 @@
 :root {
-  --bg: #f4f6f8;
+  --bg: #f7f8fa;
   --panel: #ffffff;
   --ink: #111827;
   --muted: #5b6678;
-  --line: #d9e0e7;
+  --line: #dfe5ec;
   --green: #19724a;
   --blue: #064f9e;
   --red: #a11c1c;
   --amber: #bd6b0d;
-  --shadow: 0 18px 44px rgba(17, 24, 39, 0.10);
-  --soft-shadow: 0 8px 24px rgba(17, 24, 39, 0.07);
+  --shadow: none;
+  --soft-shadow: none;
 }
 
 * {
@@ -18,8 +18,7 @@
 
 body {
   margin: 0;
-  background:
-    linear-gradient(180deg, #f8fafc 0%, var(--bg) 42%, #eef2f6 100%);
+  background: var(--bg);
   color: var(--ink);
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -40,9 +39,8 @@ textarea {
 .controls {
   border-right: 1px solid var(--line);
   padding: 24px 22px;
-  background: rgba(255, 255, 255, 0.82);
+  background: #ffffff;
   overflow-y: auto;
-  box-shadow: 10px 0 28px rgba(17, 24, 39, 0.04);
 }
 
 .brand {
@@ -109,11 +107,12 @@ select,
 textarea {
   display: block;
   width: 100%;
-  border: 1px solid #cbd5df;
-  border-radius: 6px;
-  background: #fff;
+  border: 0;
+  border-bottom: 1px solid #cbd5df;
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
-  padding: 9px 10px;
+  padding: 8px 0;
   margin-top: 6px;
   font-weight: 500;
   transition: border-color 150ms ease, box-shadow 150ms ease;
@@ -123,7 +122,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: #4e82c2;
-  box-shadow: 0 0 0 3px rgba(6, 79, 158, 0.14);
+  box-shadow: 0 1px 0 #4e82c2;
   outline: none;
 }
 
@@ -157,19 +156,18 @@ button {
   width: 100%;
   min-height: 42px;
   border: 0;
-  border-radius: 7px;
-  background: linear-gradient(180deg, #162033 0%, #0f172a 100%);
+  border-radius: 4px;
+  background: #111827;
   color: white;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: var(--soft-shadow);
 }
 
 button.secondary {
   margin-top: 10px;
-  background: #e6edf3;
+  background: transparent;
+  border: 1px solid var(--line);
   color: var(--ink);
-  box-shadow: none;
 }
 
 button:disabled {
@@ -178,8 +176,9 @@ button:disabled {
 }
 
 .workspace {
-  padding: 28px 32px 44px;
+  padding: 28px 34px 44px;
   overflow: auto;
+  background: #fbfcfd;
 }
 
 .topbar {
@@ -210,28 +209,25 @@ button:disabled {
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(180px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 0;
+  margin-bottom: 18px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .metric {
   position: relative;
   min-height: 82px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-  padding: 15px 14px 13px;
-  box-shadow: var(--soft-shadow);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 16px 18px 14px 0;
   overflow: hidden;
 }
 
-.metric::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: linear-gradient(90deg, var(--blue), var(--green));
-  opacity: 0.82;
+.metric:not(:nth-child(3n)) {
+  border-right: 1px solid var(--line);
+  margin-right: 18px;
 }
 
 .metric > span {
@@ -271,12 +267,11 @@ var sup {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  margin: 4px 0 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
-  padding: 12px 14px;
-  box-shadow: var(--soft-shadow);
+  margin: 4px 0 18px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  padding: 12px 0;
 }
 
 .toolbar-title {
@@ -302,8 +297,10 @@ var sup {
 .plot-unit-control select {
   margin-top: 0;
   border-radius: 999px;
+  border: 1px solid var(--line);
   padding: 8px 34px 8px 12px;
   font-weight: 700;
+  background: #fff;
 }
 
 .figure-grid {
@@ -314,11 +311,12 @@ var sup {
 
 .figure {
   margin: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: #fff;
   box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .figure.wide {
@@ -330,9 +328,9 @@ figcaption {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px 11px;
-  border-bottom: 1px solid #e7edf3;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  padding: 13px 0 11px;
+  border-bottom: 0;
+  background: transparent;
 }
 
 figcaption span {
@@ -349,6 +347,7 @@ canvas {
   width: 100%;
   height: auto;
   background: #fff;
+  border: 1px solid var(--line);
 }
 
 .plot-svg {
@@ -357,6 +356,15 @@ canvas {
   height: auto;
   min-height: 360px;
   background: #fff;
+  border: 1px solid var(--line);
+}
+
+.figure-note {
+  max-width: 980px;
+  padding: 11px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .plot-svg text {
@@ -387,11 +395,10 @@ canvas {
 
 .theory-panel {
   margin-top: 18px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
-  padding: 18px;
-  box-shadow: var(--soft-shadow);
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 18px 0 0;
 }
 
 .theory-panel p {
@@ -451,6 +458,16 @@ canvas {
 
   .metrics {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .metric:not(:nth-child(3n)) {
+    border-right: 0;
+    margin-right: 0;
+  }
+
+  .metric:not(:nth-child(2n)) {
+    border-right: 1px solid var(--line);
+    margin-right: 18px;
   }
 
   .plot-toolbar {

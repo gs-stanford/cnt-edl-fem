@@ -1580,9 +1580,12 @@ function sameMeshShape(a, b) {
 }
 
 function potentialColorLimitV(result, field) {
-  const requested = Math.abs(Number(controls.biasMv.value) || result.params.biasV || 0);
+  const sweepMaxDiffuse = result.sweep.reduce((maxValue, row) => {
+    const value = Math.abs(row.diffuseBiasV || 0);
+    return Math.max(maxValue, value);
+  }, 0);
   const solved = Math.abs(field?.diffuseBiasV || result.params.diffuseBiasV || 0);
-  return Math.max(0.05, requested, solved);
+  return Math.max(0.05, sweepMaxDiffuse, solved);
 }
 
 function drawPotentialContours(ctx, result, field, plot) {

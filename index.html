@@ -196,9 +196,16 @@
           <figure class="figure wide">
             <figcaption>
               <span>Potential field</span>
-              <small>Nonlinear PB solution, <span class="latex">&psi;(x,y)</span> in volts; color scale follows applied metal bias</small>
+              <small>Nonlinear PB solution, <span class="latex">&psi;(x,y)</span>; color scale fixed over solved sweep</small>
             </figcaption>
             <canvas id="potentialCanvas" width="1600" height="760"></canvas>
+            <div class="figure-note">
+              Circular lines are equipotential contours, not physical layer boundaries.
+              Color shows diffuse potential, <span class="latex">&psi;</span>, on a fixed sweep scale.
+              With the Stern boundary condition, increasing <span class="latex">&psi;<sub>m</sub></span>
+              can mostly increase <span class="latex">&Delta;&psi;<sub>S</sub></span>, so the diffuse
+              field may grow more slowly than the applied metal bias.
+            </div>
           </figure>
 
           <figure class="figure">
