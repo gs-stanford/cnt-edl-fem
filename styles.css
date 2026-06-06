@@ -399,26 +399,48 @@ canvas {
   border-radius: 0;
   background: transparent;
   padding: 18px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.theory-panel h2 {
+  margin-bottom: 14px;
+  color: var(--ink);
+  font-size: 16px;
 }
 
 .theory-panel p {
-  margin: 0;
+  margin: 0 0 10px;
   max-width: 1050px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.theory-panel .microcopy {
+  margin: 2px 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.theory-panel .latex {
+  font-size: 1em;
 }
 
 .equation {
   display: block;
   width: fit-content;
   max-width: 100%;
-  margin: 12px 0 14px;
-  padding: 10px 14px;
+  margin: 8px 0 16px;
+  padding: 9px 13px;
   border-left: 3px solid var(--blue);
   background: #f7f9fc;
   color: var(--ink);
   font-family: "Times New Roman", Times, serif;
-  font-size: 20px;
+  font-size: 18px;
   font-style: italic;
-  line-height: 1.55;
+  line-height: 1.5;
   overflow-x: auto;
 }
 
