@@ -1107,6 +1107,8 @@ async function runSweep(params, zTarget) {
       overlap: nlpb.overlap,
       enrichment,
       dhError: error,
+      mesh: nlpb.mesh,
+      potential: nlpb.potential,
     });
     if (i % 3 === 2) {
       setStatus(`Sweep ${i + 1}/${biasValues.length}`);
@@ -1469,11 +1471,12 @@ function clearCanvas(canvas) {
 
 function drawPotential(canvas, result) {
   const ctx = clearCanvas(canvas);
-  const { mesh } = result.nlpb;
+  const field = potentialFieldForDisplay(result);
+  const { mesh, potential } = field;
   const plot = aspectFitPlot(canvas, mesh);
   const image = ctx.createImageData(plot.w, plot.h);
   const thermalV = thermalVoltageV(result.params);
-  const colorLimitV = potentialColorLimitV(result);
+  const colorLimitV = potentialColorLimitV(result, field);
   for (let py = 0; py < plot.h; py += 1) {
     const y = mesh.maxY - (py / (plot.h - 1)) * (mesh.maxY - mesh.minY);
     for (let px = 0; px < plot.w; px += 1) {
@@ -1483,7 +1486,7 @@ function drawPotential(canvas, result) {
       if (inside >= 0) {
         rgb = [16, 24, 39];
       } else {
-        const psi = interpolatePotential(mesh, result.nlpb.potential, x, y);
+        const psi = interpolatePotential(mesh, potential, x, y);
         rgb = divergingColor((psi * thermalV) / colorLimitV);
       }
       const idx = 4 * (py * plot.w + px);
@@ -1497,7 +1500,7 @@ function drawPotential(canvas, result) {
   ctx.strokeStyle = "#111827";
   ctx.lineWidth = 1.2;
   ctx.strokeRect(plot.x, plot.y, plot.w, plot.h);
-  drawPotentialContours(ctx, result, plot);
+  drawPotentialContours(ctx, result, field, plot);
 
   for (const c of mesh.centers) {
     const cx = map(c.x, mesh.minX, mesh.maxX, plot.x, plot.x + plot.w);
@@ -1522,20 +1525,82 @@ function drawPotential(canvas, result) {
     ? `a=${formatNumber(0.5 * result.params.diameterNm, 2)} nm`
     : `a=${formatNumber(0.5 * result.params.diameterNm, 2)} nm, h=${formatNumber(result.params.gapNm, 2)} nm`;
   ctx.fillText(geometryText, plot.x + 10, plot.y + 38);
+  if (Number.isFinite(field.biasAbsV)) {
+    ctx.fillText(`field at |ψm|=${formatNumber(field.biasAbsV, 2)} V`, plot.x + 10, plot.y + 56);
+  }
 }
 
-function potentialColorLimitV(result) {
+function potentialFieldForDisplay(result) {
+  const biasAbsV = Math.abs(Number(controls.biasMv.value));
+  const rows = result.sweep.filter((row) => row.mesh && row.potential);
+  if (!rows.length) {
+    return {
+      mesh: result.nlpb.mesh,
+      potential: result.nlpb.potential,
+      diffuseBiasV: result.params.diffuseBiasV,
+      biasAbsV: Math.abs(result.params.biasV),
+    };
+  }
+  const sorted = [...rows].sort((a, b) => a.biasAbsV - b.biasAbsV);
+  if (biasAbsV <= sorted[0].biasAbsV) return potentialFieldFromSweepRow(sorted[0]);
+  if (biasAbsV >= sorted[sorted.length - 1].biasAbsV) return potentialFieldFromSweepRow(sorted[sorted.length - 1]);
+  for (let i = 0; i < sorted.length - 1; i += 1) {
+    const lo = sorted[i];
+    const hi = sorted[i + 1];
+    if (biasAbsV >= lo.biasAbsV && biasAbsV <= hi.biasAbsV) {
+      const t = (biasAbsV - lo.biasAbsV) / Math.max(1e-12, hi.biasAbsV - lo.biasAbsV);
+      return interpolatePotentialFields(lo, hi, t, biasAbsV);
+    }
+  }
+  return potentialFieldFromSweepRow(nearestSweepRowByKey(sorted, biasAbsV, "biasAbsV"));
+}
+
+function potentialFieldFromSweepRow(row) {
+  return {
+    mesh: row.mesh,
+    potential: row.potential,
+    diffuseBiasV: row.diffuseBiasV,
+    biasAbsV: row.biasAbsV,
+  };
+}
+
+function interpolatePotentialFields(lo, hi, t, biasAbsV) {
+  if (
+    !lo.potential ||
+    !hi.potential ||
+    lo.potential.length !== hi.potential.length ||
+    !sameMeshShape(lo.mesh, hi.mesh)
+  ) {
+    return potentialFieldFromSweepRow(t < 0.5 ? lo : hi);
+  }
+  const potential = new Float64Array(lo.potential.length);
+  for (let i = 0; i < potential.length; i += 1) {
+    potential[i] = lo.potential[i] + t * (hi.potential[i] - lo.potential[i]);
+  }
+  return {
+    mesh: lo.mesh,
+    potential,
+    diffuseBiasV: lo.diffuseBiasV + t * (hi.diffuseBiasV - lo.diffuseBiasV),
+    biasAbsV,
+  };
+}
+
+function sameMeshShape(a, b) {
+  return Boolean(a && b && a.nx === b.nx && a.ny === b.ny && a.centers.length === b.centers.length);
+}
+
+function potentialColorLimitV(result, field) {
   const requested = Math.abs(Number(controls.biasMv.value) || result.params.biasV || 0);
-  const solved = Math.abs(result.params.diffuseBiasV || 0);
+  const solved = Math.abs(field?.diffuseBiasV || result.params.diffuseBiasV || 0);
   return Math.max(0.05, requested, solved);
 }
 
-function drawPotentialContours(ctx, result, plot) {
-  const { mesh } = result.nlpb;
+function drawPotentialContours(ctx, result, field, plot) {
+  const { mesh, potential } = field;
   const thermalV = thermalVoltageV(result.params);
-  const fieldLimit = Math.abs(result.params.diffuseBiasV || 0);
+  const fieldLimit = Math.abs(field.diffuseBiasV || 0);
   if (!Number.isFinite(fieldLimit) || fieldLimit < 0.01) return;
-  const sign = Math.sign(result.params.biasV || result.params.diffuseBiasV || 1);
+  const sign = Math.sign(Number(controls.biasMv.value) || field.diffuseBiasV || 1);
   const levels = [0.25, 0.5, 0.75].map((fraction) => sign * fraction * fieldLimit);
   ctx.save();
   ctx.strokeStyle = sign >= 0 ? "rgba(115, 26, 26, 0.55)" : "rgba(6, 79, 158, 0.55)";
@@ -1552,10 +1617,10 @@ function drawPotentialContours(ctx, result, plot) {
         const cy = 0.5 * (y0 + y1);
         if (insideCylinderIndex(cx, cy, mesh.centers, mesh.a * 1.03) >= 0) continue;
         const values = [
-          result.nlpb.potential[j * mesh.nx + i] * thermalV,
-          result.nlpb.potential[j * mesh.nx + i + 1] * thermalV,
-          result.nlpb.potential[(j + 1) * mesh.nx + i + 1] * thermalV,
-          result.nlpb.potential[(j + 1) * mesh.nx + i] * thermalV,
+          potential[j * mesh.nx + i] * thermalV,
+          potential[j * mesh.nx + i + 1] * thermalV,
+          potential[(j + 1) * mesh.nx + i + 1] * thermalV,
+          potential[(j + 1) * mesh.nx + i] * thermalV,
         ];
         const points = contourCellPoints(
           [
@@ -2384,7 +2449,7 @@ function syncBiasFromSlider() {
   if (!latestResult) return;
   updateMetricCardsFromSweep(latestResult, biasV);
   drawAll(latestResult);
-  setStatus("Slider preview; run model to recompute field");
+  setStatus("Slider preview from solved sweep; run model after changing inputs");
 }
 
 function syncBiasFromNumber() {
@@ -2396,7 +2461,7 @@ function syncBiasFromNumber() {
   if (!latestResult) return;
   updateMetricCardsFromSweep(latestResult, biasV);
   drawAll(latestResult);
-  setStatus("Slider preview; run model to recompute field");
+  setStatus("Slider preview from solved sweep; run model after changing inputs");
 }
 
 function syncStabilityLimit() {
