@@ -1285,7 +1285,7 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
     const { plot } = clearSvg(svg);
     if (outputs.benchmarkCaption) {
       outputs.benchmarkCaption.textContent =
-        "set CNT cylinders = 1 to compare radial DH charge with analytic cylindrical DH";
+        "set CNT cylinders = 1 to compare PB/FEM charge with the thin-EDL Gouy-Chapman limit";
     }
     svg.appendChild(svgText("Set CNT cylinders = 1", plot.x + 82, plot.y + 112, {
       class: "axis-label",
@@ -1297,7 +1297,7 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
     return;
   }
 
-  const benchmark = singleCylinderRadialDhBenchmark(result);
+  const benchmark = singleCylinderGcBenchmark(result);
   if (!benchmark || !benchmark.rows.length) {
     const { plot } = clearSvg(svg);
     if (outputs.benchmarkCaption) {
@@ -1312,8 +1312,10 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
 
   if (outputs.benchmarkCaption) {
     outputs.benchmarkCaption.innerHTML =
-      `radial DH charge vs analytic cylinder DH; mean error ` +
-      `<span class="latex">${formatNumber(100 * benchmark.meanChargeError, 2)}%</span>`;
+      `PB/FEM charge vs thin-EDL Gouy-Chapman; mean error ` +
+      `<span class="latex">${formatNumber(100 * benchmark.meanChargeError, 2)}%</span>. ` +
+      `Expected to collapse for <span class="latex">a/&lambda;<sub>D</sub>&gg;1</span> and large ` +
+      `<span class="latex">C<sub>S</sub></span>.`;
   }
 
   drawSvgLinePlot(svg, {
@@ -1321,23 +1323,64 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
     xKey: "biasAbsV",
     series: dimensionalPlots
       ? [
-        { key: "analyticSigmaAbs", label: "analytic DH", color: "#111827", axis: "left" },
-        { key: "radialSigmaAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
+        { key: "gcSigmaAbs", label: "thin GC", color: "#111827", axis: "left" },
+        { key: "femSigmaAbs", label: "PB/FEM", color: "#064f9e", axis: "left" },
       ]
       : [
-        { key: "analyticQAbs", label: "analytic DH", color: "#111827", axis: "left" },
-        { key: "radialQAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
+        { key: "gcQAbs", label: "thin GC", color: "#111827", axis: "left" },
+        { key: "femQAbs", label: "PB/FEM", color: "#064f9e", axis: "left" },
       ],
     xLabel: "|ψₘ| (V)",
-    yLabel: dimensionalPlots ? "|σ_DH| (C/m²)" : "|q_DH*|",
+    yLabel: dimensionalPlots ? "|σ| (C/m²)" : "|q′*|",
     xLabelParts: mathVoltageMagnitudeParts(),
-    yLabelParts: dimensionalPlots ? mathSigmaDhAbsParts() : mathQDhAbsParts(),
+    yLabelParts: dimensionalPlots ? mathSigmaAvgAbsParts() : mathQAbsParts(),
     xMinZero: true,
     xFixedRange: [0, result.params.stabilityLimitV],
     yMinZero: true,
     currentX: Math.abs(Number(controls.biasMv.value)),
     showLegend: true,
   });
+}
+
+function singleCylinderGcBenchmark(result) {
+  const rows = [];
+  let errorSum = 0;
+  let errorCount = 0;
+  for (const row of result.sweep) {
+    const gcLocal = planarGcLocalChargeStar(row.psiS, result.params.species);
+    const gcQ = 2 * Math.PI * result.params.radiusStar * gcLocal;
+    if (!Number.isFinite(gcQ) || !Number.isFinite(row.qStar)) continue;
+    const chargeError = Math.abs(row.qStar - gcQ) / Math.max(1e-12, Math.abs(gcQ));
+    const gcSigma = averageSurfaceChargeCpm2(gcQ, result.params);
+    if (Math.abs(gcQ) > 1e-9) {
+      errorSum += chargeError;
+      errorCount += 1;
+    }
+    rows.push({
+      biasAbsV: row.biasAbsV,
+      femQAbs: Math.abs(row.qStar),
+      gcQAbs: Math.abs(gcQ),
+      femSigmaAbs: Math.abs(row.sigmaAvgCpm2),
+      gcSigmaAbs: Math.abs(gcSigma),
+      chargeError,
+    });
+  }
+  return {
+    rows,
+    meanChargeError: errorCount > 0 ? errorSum / errorCount : 0,
+  };
+}
+
+function planarGcLocalChargeStar(psiSurface, species) {
+  if (!Number.isFinite(psiSurface)) return NaN;
+  const denominator = species.reduce((sum, item) => sum + item.z * item.z * item.c, 0);
+  if (!(denominator > 0)) return NaN;
+  let excessOsmotic = 0;
+  for (const item of species) {
+    excessOsmotic += item.c * (Math.exp(Math.max(-70, Math.min(70, -item.z * psiSurface))) - 1);
+  }
+  const magnitude = Math.sqrt(Math.max(0, (2 * excessOsmotic) / denominator));
+  return Math.sign(psiSurface || 1) * magnitude;
 }
 
 function singleCylinderRadialDhBenchmark(result) {
