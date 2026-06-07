@@ -1505,6 +1505,8 @@ function drawPotential(canvas, result) {
     ctx.stroke();
   }
 
+  drawSternDropBand(ctx, result, field, plot);
+
   drawColorbar(ctx, canvas.width - 68, plot.y, 14, plot.h, colorLimitV, "V");
   ctx.fillStyle = "#111827";
   ctx.font = "700 13px Arial";
@@ -1518,6 +1520,10 @@ function drawPotential(canvas, result) {
   if (Number.isFinite(field.biasAbsV)) {
     ctx.fillText(`field at |ψm|=${formatNumber(field.biasAbsV, 2)} V`, plot.x + 10, plot.y + 56);
   }
+  if (result.params.boundaryMode === "robin" && result.params.sternDelta > 1e-12) {
+    const sternLimitV = sternColorLimitV(result, field);
+    ctx.fillText(`surface band: ΔψS=ψm−ψd, common scale ±${formatNumber(sternLimitV, 2)} V`, plot.x + 10, plot.y + 74);
+  }
 }
 
 function potentialFieldForDisplay(result) {
@@ -1529,6 +1535,7 @@ function potentialFieldForDisplay(result) {
       potential: result.nlpb.potential,
       diffuseBiasV: result.params.diffuseBiasV,
       biasAbsV: Math.abs(result.params.biasV),
+      metalPsi: result.params.metalPsi,
     };
   }
   const sorted = [...rows].sort((a, b) => a.biasAbsV - b.biasAbsV);
@@ -1551,6 +1558,7 @@ function potentialFieldFromSweepRow(row) {
     potential: row.potential,
     diffuseBiasV: row.diffuseBiasV,
     biasAbsV: row.biasAbsV,
+    metalPsi: row.metalPsi,
   };
 }
 
@@ -1572,6 +1580,7 @@ function interpolatePotentialFields(lo, hi, t, biasAbsV) {
     potential,
     diffuseBiasV: lo.diffuseBiasV + t * (hi.diffuseBiasV - lo.diffuseBiasV),
     biasAbsV,
+    metalPsi: lo.metalPsi + t * (hi.metalPsi - lo.metalPsi),
   };
 }
 
@@ -1584,8 +1593,71 @@ function potentialColorLimitV(result, field) {
     const value = Math.abs(row.diffuseBiasV || 0);
     return Math.max(maxValue, value);
   }, 0);
+  const sweepMaxStern = result.sweep.reduce((maxValue, row) => {
+    const value = Math.abs(row.sternDropV || 0);
+    return Math.max(maxValue, value);
+  }, 0);
   const solved = Math.abs(field?.diffuseBiasV || result.params.diffuseBiasV || 0);
-  return Math.max(0.05, sweepMaxDiffuse, solved);
+  const metalPsi = Number.isFinite(field?.metalPsi) ? field.metalPsi : result.params.metalPsi;
+  const diffuseV = Number.isFinite(field?.diffuseBiasV) ? field.diffuseBiasV : (result.params.diffuseBiasV || 0);
+  const currentStern = Math.abs((metalPsi || 0) * thermalVoltageV(result.params) - diffuseV);
+  return Math.max(0.05, sweepMaxDiffuse, sweepMaxStern, solved, currentStern);
+}
+
+function sternColorLimitV(result, field) {
+  return potentialColorLimitV(result, field);
+}
+
+function drawSternDropBand(ctx, result, field, plot) {
+  if (result.params.boundaryMode !== "robin" || !(result.params.sternDelta > 1e-12)) return;
+  const { mesh, potential } = field;
+  const metalPsi = Number.isFinite(field.metalPsi) ? field.metalPsi : result.params.metalPsi;
+  if (!Number.isFinite(metalPsi)) return;
+
+  const thermalV = thermalVoltageV(result.params);
+  const sternLimitV = sternColorLimitV(result, field);
+  const ringWidth = Math.max(8, Math.min(18, mesh.a * plot.scale * 0.15));
+  const samples = Math.max(120, Math.ceil((2 * Math.PI * mesh.a * plot.scale) / 4));
+
+  ctx.save();
+  ctx.lineWidth = ringWidth;
+  ctx.lineCap = "butt";
+
+  for (const center of mesh.centers) {
+    const cx = map(center.x, mesh.minX, mesh.maxX, plot.x, plot.x + plot.w);
+    const cy = map(center.y, mesh.maxY, mesh.minY, plot.y, plot.y + plot.h);
+    const radiusPx = mesh.a * plot.scale + 0.65 * ringWidth;
+
+    for (let k = 0; k < samples; k += 1) {
+      const theta0 = k * (2 * Math.PI / samples);
+      const theta1 = (k + 1) * (2 * Math.PI / samples);
+      const thetaMid = 0.5 * (theta0 + theta1);
+      const psiSurface = surfacePotentialAtAngle(mesh, potential, center, thetaMid);
+      if (!Number.isFinite(psiSurface)) continue;
+      const sternDropV = (metalPsi - psiSurface) * thermalV;
+      const rgb = divergingColor(sternDropV / sternLimitV);
+      ctx.strokeStyle = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radiusPx, -theta0, -theta1, true);
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, mesh.a * plot.scale, 0, 2 * Math.PI);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.92)";
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function surfacePotentialAtAngle(mesh, potential, center, theta) {
+  const sx = center.x + mesh.a * Math.cos(theta);
+  const sy = center.y + mesh.a * Math.sin(theta);
+  const node = nearestUnknownNode(mesh, sx, sy);
+  if (!node) return NaN;
+  return potential[node.j * mesh.nx + node.i];
 }
 
 function drawPotentialContours(ctx, result, field, plot) {
