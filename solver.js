@@ -1026,6 +1026,7 @@ function areaCapacitanceFpm2(cStar, params) {
 function addDimensionalSweepValues(rows, params) {
   for (const row of rows) {
     row.diffusePotentialV = row.psiS * thermalVoltageV(params);
+    row.diffusePotentialAbsV = Math.abs(row.diffusePotentialV);
     row.midPotentialV = row.midPsi * thermalVoltageV(params);
     row.midPotentialMv = row.midPsi * params.thermalMv;
     row.qAbsStar = Math.abs(row.qStar);
@@ -1225,15 +1226,14 @@ function drawAll(result) {
   drawSvgTrajectory(outputs.trajectory, result.sweep, currentBiasAbsV, dimensionalPlots);
   drawSvgLinePlot(outputs.error, {
     rows: result.sweep,
-    xKey: "biasAbsV",
+    xKey: dimensionalPlots ? "diffusePotentialAbsV" : "psiAbs",
     series: [{ key: "dhError", label: "DH error", color: "#a11c1c", axis: "left" }],
-    xLabel: "|ψₘ| (V)",
+    xLabel: dimensionalPlots ? "|ψ_d| (V)" : "|Ψ_d*|",
     yLabel: "ε_q*",
-    xLabelParts: mathVoltageMagnitudeParts(),
+    xLabelParts: dimensionalPlots ? mathDiffuseVoltageMagnitudeParts() : mathDiffusePsiMagnitudeParts(),
     yLabelParts: mathEpsilonQParts(),
-    currentX: currentBiasAbsV,
+    currentX: currentDhErrorX(result, currentBiasAbsV, dimensionalPlots),
     xMinZero: true,
-    xFixedRange: [0, result.params.stabilityLimitV],
     yMinZero: true,
     showLegend: false,
   });
@@ -1266,6 +1266,12 @@ function drawAll(result) {
     });
   }
   drawSingleCylinderBenchmark(outputs.benchmark, result, dimensionalPlots);
+}
+
+function currentDhErrorX(result, currentBiasAbsV, dimensionalPlots) {
+  const row = interpolateSweepRowByKey(result.sweep, currentBiasAbsV, "biasAbsV");
+  if (!row) return NaN;
+  return dimensionalPlots ? row.diffusePotentialAbsV : row.psiAbs;
 }
 
 function updateOneCylinderVisibility(oneCylinder) {
@@ -2054,6 +2060,25 @@ function mathPsiMagnitudeParts() {
   ];
 }
 
+function mathDiffusePsiMagnitudeParts() {
+  return [
+    { text: "|" },
+    { text: "Ψ" },
+    { text: "d", sub: true },
+    { text: "*" , sup: true },
+    { text: "|" },
+  ];
+}
+
+function mathDiffuseVoltageMagnitudeParts() {
+  return [
+    { text: "|" },
+    { text: "ψ" },
+    { text: "d", sub: true },
+    { text: "| (V)" },
+  ];
+}
+
 function mathVoltageMagnitudeParts() {
   return [
     { text: "|" },
@@ -2166,6 +2191,7 @@ function interpolateSweepRowByKey(rows, value, keyName) {
         "biasV",
         "biasAbsV",
         "diffuseBiasV",
+        "diffusePotentialAbsV",
         "sternDropV",
         "qStar",
         "qDhStar",
@@ -2452,6 +2478,7 @@ function exportCsv() {
     "metal_bias_V",
     "metal_bias_mV",
     "diffuse_bias_V",
+    "abs_diffuse_bias_V",
     "stern_drop_V",
     "debye_length_nm",
     "solver_debye_length_nm",
@@ -2478,6 +2505,7 @@ function exportCsv() {
       row.biasV,
       row.biasMv,
       row.diffuseBiasV,
+      row.diffusePotentialAbsV,
       row.sternDropV,
       latestResult.params.debyeNm,
       latestResult.params.solverDebyeNm,
