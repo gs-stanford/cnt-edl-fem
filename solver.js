@@ -1285,19 +1285,19 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
     const { plot } = clearSvg(svg);
     if (outputs.benchmarkCaption) {
       outputs.benchmarkCaption.textContent =
-        "set CNT cylinders = 1 to compare PB/FEM charge with the thin-EDL Gouy-Chapman limit";
+        "set CNT cylinders = 1 to compare annular FEM-DH with analytic cylindrical DH";
     }
     svg.appendChild(svgText("Set CNT cylinders = 1", plot.x + 82, plot.y + 112, {
       class: "axis-label",
       "font-size": 16,
     }));
-    svg.appendChild(svgText("The radial benchmark is only defined for an isolated cylinder.", plot.x + 28, plot.y + 142, {
+    svg.appendChild(svgText("The cylindrical DH benchmark is only defined for an isolated cylinder.", plot.x + 28, plot.y + 142, {
       "font-size": 12,
     }));
     return;
   }
 
-  const benchmark = singleCylinderGcBenchmark(result);
+  const benchmark = singleCylinderDhAccuracyBenchmark(result);
   if (!benchmark || !benchmark.rows.length) {
     const { plot } = clearSvg(svg);
     if (outputs.benchmarkCaption) {
@@ -1312,10 +1312,9 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
 
   if (outputs.benchmarkCaption) {
     outputs.benchmarkCaption.innerHTML =
-      `PB/FEM charge vs thin-EDL Gouy-Chapman; mean error ` +
-      `<span class="latex">${formatNumber(100 * benchmark.meanChargeError, 2)}%</span>. ` +
-      `Expected to collapse for <span class="latex">a/&lambda;<sub>D</sub>&gg;1</span> and large ` +
-      `<span class="latex">C<sub>S</sub></span>.`;
+      `analytic cylindrical DH vs radial mesh and annular FEM-DH; mean FEM error ` +
+      `<span class="latex">${formatNumber(100 * benchmark.meanFemError, 2)}%</span>, radial error ` +
+      `<span class="latex">${formatNumber(100 * benchmark.meanRadialError, 2)}%</span>.`;
   }
 
   drawSvgLinePlot(svg, {
@@ -1323,17 +1322,19 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
     xKey: "biasAbsV",
     series: dimensionalPlots
       ? [
-        { key: "gcSigmaAbs", label: "thin GC", color: "#111827", axis: "left" },
-        { key: "femSigmaAbs", label: "PB/FEM", color: "#064f9e", axis: "left" },
+        { key: "analyticSigmaAbs", label: "analytic DH", color: "#111827", axis: "left" },
+        { key: "radialSigmaAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
+        { key: "femDhSigmaAbs", label: "annular FEM-DH", color: "#19724a", axis: "left" },
       ]
       : [
-        { key: "gcQAbs", label: "thin GC", color: "#111827", axis: "left" },
-        { key: "femQAbs", label: "PB/FEM", color: "#064f9e", axis: "left" },
+        { key: "analyticQAbs", label: "analytic DH", color: "#111827", axis: "left" },
+        { key: "radialQAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
+        { key: "femDhQAbs", label: "annular FEM-DH", color: "#19724a", axis: "left" },
       ],
     xLabel: "|ψₘ| (V)",
-    yLabel: dimensionalPlots ? "|σ| (C/m²)" : "|q′*|",
+    yLabel: dimensionalPlots ? "|σ_DH| (C/m²)" : "|q_DH*|",
     xLabelParts: mathVoltageMagnitudeParts(),
-    yLabelParts: dimensionalPlots ? mathSigmaAvgAbsParts() : mathQAbsParts(),
+    yLabelParts: dimensionalPlots ? mathSigmaDhAbsParts() : mathQDhAbsParts(),
     xMinZero: true,
     xFixedRange: [0, result.params.stabilityLimitV],
     yMinZero: true,
@@ -1342,86 +1343,43 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
   });
 }
 
-function singleCylinderGcBenchmark(result) {
+function singleCylinderDhAccuracyBenchmark(result) {
   const rows = [];
-  let errorSum = 0;
+  let femErrorSum = 0;
+  let radialErrorSum = 0;
   let errorCount = 0;
   for (const row of result.sweep) {
-    const gcLocal = planarGcLocalChargeStar(row.psiS, result.params.species);
-    const gcQ = 2 * Math.PI * result.params.radiusStar * gcLocal;
-    if (!Number.isFinite(gcQ) || !Number.isFinite(row.qStar)) continue;
-    const chargeError = Math.abs(row.qStar - gcQ) / Math.max(1e-12, Math.abs(gcQ));
-    const gcSigma = averageSurfaceChargeCpm2(gcQ, result.params);
-    if (Math.abs(gcQ) > 1e-9) {
-      errorSum += chargeError;
-      errorCount += 1;
-    }
-    rows.push({
-      biasAbsV: row.biasAbsV,
-      femQAbs: Math.abs(row.qStar),
-      gcQAbs: Math.abs(gcQ),
-      femSigmaAbs: Math.abs(row.sigmaAvgCpm2),
-      gcSigmaAbs: Math.abs(gcSigma),
-      chargeError,
-    });
-  }
-  return {
-    rows,
-    meanChargeError: errorCount > 0 ? errorSum / errorCount : 0,
-  };
-}
-
-function planarGcLocalChargeStar(psiSurface, species) {
-  if (!Number.isFinite(psiSurface)) return NaN;
-  const denominator = species.reduce((sum, item) => sum + item.z * item.z * item.c, 0);
-  if (!(denominator > 0)) return NaN;
-  let excessOsmotic = 0;
-  for (const item of species) {
-    excessOsmotic += item.c * (Math.exp(Math.max(-70, Math.min(70, -item.z * psiSurface))) - 1);
-  }
-  const magnitude = Math.sqrt(Math.max(0, (2 * excessOsmotic) / denominator));
-  return Math.sign(psiSurface || 1) * magnitude;
-}
-
-function singleCylinderRadialDhBenchmark(result) {
-  const physicalRadiusStar = (0.5 * result.params.diameterNm) / result.params.debyeNm;
-  const physicalSternDelta = computeSternDelta(
-    result.params.epsilonR,
-    result.params.debyeNm,
-    result.params.sternCapFpm2,
-  );
-  const rows = [];
-  let errorSum = 0;
-  let errorCount = 0;
-  for (const row of result.sweep) {
-    const reference = analyticCylinderDhCharge(row.metalPsi, physicalRadiusStar, physicalSternDelta);
-    const radial = radialDhCharge(row.metalPsi, physicalRadiusStar, physicalSternDelta);
-    if (!Number.isFinite(reference.qStar) || !Number.isFinite(radial.qStar)) continue;
-    const chargeError = Math.abs(radial.qStar - reference.qStar) / Math.max(1e-12, Math.abs(reference.qStar));
-    const benchmarkParams = {
-      ...result.params,
-      radiusStar: physicalRadiusStar,
-      solverDebyeNm: result.params.debyeNm,
-      cylinderCount: 1,
-    };
-    const analyticSigma = averageSurfaceChargeCpm2(reference.qStar, benchmarkParams);
-    const radialSigma = averageSurfaceChargeCpm2(radial.qStar, benchmarkParams);
+    const reference = analyticCylinderDhCharge(row.metalPsi, result.params.radiusStar, result.params.sternDelta);
+    const radial = radialDhCharge(row.metalPsi, result.params.radiusStar, result.params.sternDelta);
+    const annularFem = annularFemDhCharge(row.metalPsi, result.params.radiusStar, result.params.sternDelta);
+    if (!Number.isFinite(reference.qStar) || !Number.isFinite(radial.qStar) || !Number.isFinite(annularFem.qStar)) continue;
+    const denom = Math.max(1e-12, Math.abs(reference.qStar));
+    const femChargeError = Math.abs(annularFem.qStar - reference.qStar) / denom;
+    const radialChargeError = Math.abs(radial.qStar - reference.qStar) / denom;
+    const analyticSigma = averageSurfaceChargeCpm2(reference.qStar, result.params);
+    const radialSigma = averageSurfaceChargeCpm2(radial.qStar, result.params);
+    const femDhSigma = averageSurfaceChargeCpm2(annularFem.qStar, result.params);
     if (Math.abs(reference.qStar) > 1e-9) {
-      errorSum += chargeError;
+      femErrorSum += femChargeError;
+      radialErrorSum += radialChargeError;
       errorCount += 1;
     }
     rows.push({
       biasAbsV: row.biasAbsV,
-      radialQAbs: Math.abs(radial.qStar),
       analyticQAbs: Math.abs(reference.qStar),
-      radialSigmaAbs: Math.abs(radialSigma),
+      radialQAbs: Math.abs(radial.qStar),
+      femDhQAbs: Math.abs(annularFem.qStar),
       analyticSigmaAbs: Math.abs(analyticSigma),
-      chargeError,
+      radialSigmaAbs: Math.abs(radialSigma),
+      femDhSigmaAbs: Math.abs(femDhSigma),
+      femChargeError,
+      radialChargeError,
     });
   }
   return {
     rows,
-    meanChargeError: errorCount > 0 ? errorSum / errorCount : 0,
+    meanFemError: errorCount > 0 ? femErrorSum / errorCount : 0,
+    meanRadialError: errorCount > 0 ? radialErrorSum / errorCount : 0,
   };
 }
 
@@ -1430,6 +1388,117 @@ function analyticCylinderDhCharge(metalPsi, radiusStar, sternDelta) {
   const ratio = besselK1OverK0(radiusStar);
   const qLocal = metalPsi * ratio / (1 + sternDelta * ratio);
   return { qStar: 2 * Math.PI * radiusStar * qLocal };
+}
+
+function annularFemDhCharge(metalPsi, radiusStar, sternDelta) {
+  if (!Number.isFinite(radiusStar) || radiusStar <= 0) return { qStar: NaN };
+  if (!Number.isFinite(metalPsi)) return { qStar: NaN };
+  const mesh = createAnnularBenchmarkMesh(radiusStar);
+  const rows = Array.from({ length: mesh.unknownCount }, () => new Map());
+  const rhs = new Float64Array(mesh.unknownCount);
+
+  for (const ids of mesh.triangles) {
+    const elem = triangleElement(mesh.nodes, ids);
+    if (!Number.isFinite(elem.area) || elem.area <= 0) continue;
+    for (let a = 0; a < 3; a += 1) {
+      const rowNode = mesh.nodes[ids[a]];
+      if (rowNode.unknown < 0) continue;
+      const row = rowNode.unknown;
+      for (let b = 0; b < 3; b += 1) {
+        const colNode = mesh.nodes[ids[b]];
+        const stiffness = elem.k[a][b];
+        const mass = elem.area * (a === b ? 1 / 6 : 1 / 12);
+        const val = stiffness + mass;
+        if (colNode.unknown >= 0) {
+          const map = rows[row];
+          map.set(colNode.unknown, (map.get(colNode.unknown) || 0) + val);
+        } else if (colNode.dirichlet && colNode.value) {
+          rhs[row] -= val * colNode.value;
+        }
+      }
+    }
+  }
+
+  if (sternDelta > 1e-12) {
+    const robinCoeff = 1 / sternDelta;
+    for (const item of mesh.robinBoundary) {
+      const row = item.unknown;
+      const map = rows[row];
+      map.set(row, (map.get(row) || 0) + item.weight * robinCoeff);
+      rhs[row] += item.weight * robinCoeff * metalPsi;
+    }
+  } else {
+    return annularDirichletDhCharge(metalPsi, radiusStar);
+  }
+
+  const solved = cgSolve(rowsToCsr(rows), rhs, null, 5e-9, 1600);
+  let q = 0;
+  for (const item of mesh.robinBoundary) {
+    q += ((metalPsi - solved.x[item.unknown]) / sternDelta) * item.weight;
+  }
+  return { qStar: q, rel: solved.rel, iteration: solved.iteration };
+}
+
+function createAnnularBenchmarkMesh(radiusStar) {
+  const sMax = 14;
+  const radialCount = 70;
+  const thetaCount = 160;
+  const stretch = 1.35;
+  const nodes = [];
+  const index = (ir, it) => ir * thetaCount + ((it + thetaCount) % thetaCount);
+
+  for (let ir = 0; ir < radialCount; ir += 1) {
+    const frac = ir / (radialCount - 1);
+    const r = radiusStar + sMax * (frac ** stretch);
+    const outer = ir === radialCount - 1;
+    for (let it = 0; it < thetaCount; it += 1) {
+      const theta = (2 * Math.PI * it) / thetaCount;
+      nodes.push({
+        x: r * Math.cos(theta),
+        y: r * Math.sin(theta),
+        r,
+        theta,
+        dirichlet: outer,
+        value: 0,
+        unknown: outer ? -1 : 0,
+        used: true,
+      });
+    }
+  }
+
+  let unknownCount = 0;
+  for (const node of nodes) {
+    if (!node.dirichlet) {
+      node.unknown = unknownCount;
+      unknownCount += 1;
+    }
+  }
+
+  const triangles = [];
+  for (let ir = 0; ir < radialCount - 1; ir += 1) {
+    for (let it = 0; it < thetaCount; it += 1) {
+      const n00 = index(ir, it);
+      const n10 = index(ir + 1, it);
+      const n01 = index(ir, it + 1);
+      const n11 = index(ir + 1, it + 1);
+      triangles.push([n00, n10, n11]);
+      triangles.push([n00, n11, n01]);
+    }
+  }
+
+  const ds = (2 * Math.PI * radiusStar) / thetaCount;
+  const robinBoundary = [];
+  for (let it = 0; it < thetaCount; it += 1) {
+    const unknown = nodes[index(0, it)].unknown;
+    if (unknown >= 0) robinBoundary.push({ unknown, weight: ds });
+  }
+
+  return { nodes, triangles, unknownCount, robinBoundary };
+}
+
+function annularDirichletDhCharge(metalPsi, radiusStar) {
+  const radial = radialDhCharge(metalPsi, radiusStar, 0);
+  return { qStar: radial.qStar };
 }
 
 function radialDhCharge(metalPsi, radiusStar, sternDelta) {
