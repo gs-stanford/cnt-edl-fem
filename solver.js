@@ -1628,6 +1628,7 @@ function drawSternDropBand(ctx, result, field, plot) {
     const cy = map(center.y, mesh.maxY, mesh.minY, plot.y, plot.y + plot.h);
     const radiusPx = mesh.a * plot.scale + 0.65 * ringWidth;
 
+    ctx.lineWidth = ringWidth;
     for (let k = 0; k < samples; k += 1) {
       const theta0 = k * (2 * Math.PI / samples);
       const theta1 = (k + 1) * (2 * Math.PI / samples);
