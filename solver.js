@@ -1285,7 +1285,7 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
     const { plot } = clearSvg(svg);
     if (outputs.benchmarkCaption) {
       outputs.benchmarkCaption.textContent =
-        "set CNT cylinders = 1 to compare annular FEM-DH with analytic cylindrical DH";
+        "set CNT cylinders = 1 to compare analytic cylindrical DH, 1D radial finite-difference DH, and 2D annular finite-element DH";
     }
     svg.appendChild(svgText("Set CNT cylinders = 1", plot.x + 82, plot.y + 112, {
       class: "axis-label",
@@ -1312,8 +1312,8 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
 
   if (outputs.benchmarkCaption) {
     outputs.benchmarkCaption.innerHTML =
-      `analytic cylindrical DH vs radial mesh and annular FEM-DH; mean FEM error ` +
-      `<span class="latex">${formatNumber(100 * benchmark.meanFemError, 2)}%</span>, radial error ` +
+      `analytic cylindrical DH vs 1D radial finite-difference DH and 2D annular finite-element DH; mean 2D FEM error ` +
+      `<span class="latex">${formatNumber(100 * benchmark.meanFemError, 2)}%</span>, 1D radial error ` +
       `<span class="latex">${formatNumber(100 * benchmark.meanRadialError, 2)}%</span>.`;
   }
 
@@ -1322,14 +1322,14 @@ function drawSingleCylinderBenchmark(svg, result, dimensionalPlots) {
     xKey: "biasAbsV",
     series: dimensionalPlots
       ? [
-        { key: "analyticSigmaAbs", label: "analytic DH", color: "#111827", axis: "left" },
-        { key: "radialSigmaAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
-        { key: "femDhSigmaAbs", label: "annular FEM-DH", color: "#19724a", axis: "left" },
+        { key: "analyticSigmaAbs", label: "analytic cylindrical DH", color: "#111827", axis: "left" },
+        { key: "radialSigmaAbs", label: "1D radial finite-difference DH", color: "#064f9e", axis: "left" },
+        { key: "femDhSigmaAbs", label: "2D annular finite-element DH", color: "#19724a", axis: "left" },
       ]
       : [
-        { key: "analyticQAbs", label: "analytic DH", color: "#111827", axis: "left" },
-        { key: "radialQAbs", label: "radial mesh", color: "#064f9e", axis: "left" },
-        { key: "femDhQAbs", label: "annular FEM-DH", color: "#19724a", axis: "left" },
+        { key: "analyticQAbs", label: "analytic cylindrical DH", color: "#111827", axis: "left" },
+        { key: "radialQAbs", label: "1D radial finite-difference DH", color: "#064f9e", axis: "left" },
+        { key: "femDhQAbs", label: "2D annular finite-element DH", color: "#19724a", axis: "left" },
       ],
     xLabel: "|ψₘ| (V)",
     yLabel: dimensionalPlots ? "|σ_DH| (C/m²)" : "|q_DH*|",
